@@ -49,17 +49,43 @@ async function authenticate(req, res, next) {
       return res.status(401).json({ error: 'Invalid token' });
     }
 
-    const user = await prisma.user.findUnique({
-      where: { id: decoded.userId },
-    });
-
-    if (!user) {
-      console.error('User not found:', decoded.userId);
-      return res.status(404).json({ error: 'User not found' });
+    // Handle database unavailable scenario or temp users
+    if (!prisma || decoded.userId.startsWith('temp_')) {
+      // When database unavailable or temp user, create minimal user from token
+      req.user = { 
+        id: decoded.userId,
+        // Try to extract spotifyId from temp user ID format (temp_spotifyId)
+        spotifyId: decoded.userId.startsWith('temp_') ? decoded.userId.replace('temp_', '') : null,
+      };
+      return next();
     }
 
-    req.user = user;
-    next();
+    try {
+      const user = await prisma.user.findUnique({
+        where: { id: decoded.userId },
+      });
+
+      if (!user) {
+        console.warn('User not found in database:', decoded.userId, '- allowing request with minimal user object');
+        // Fallback: allow request to continue with minimal user object
+        req.user = { 
+          id: decoded.userId,
+          spotifyId: null,
+        };
+        return next();
+      }
+
+      req.user = user;
+      next();
+    } catch (dbError) {
+      console.error('Database error in authentication:', dbError);
+      // Fallback: allow request to continue with minimal user object
+      req.user = { 
+        id: decoded.userId,
+        spotifyId: decoded.userId.startsWith('temp_') ? decoded.userId.replace('temp_', '') : null,
+      };
+      next();
+    }
   } catch (error) {
     console.error('Authentication error:', error.message);
     res.status(401).json({ error: 'Authentication failed', message: error.message });
@@ -141,7 +167,18 @@ router.get('/top-tracks', authenticate, async (req, res) => {
       .sort((a, b) => b.count - a.count)
       .slice(0, parseInt(limit));
 
-    res.json(topTracks);
+    // Ensure all tracks have required fields including imageUrl
+    const formattedTracks = topTracks.map(track => ({
+      trackId: track.trackId,
+      name: track.name,
+      artist: track.artist,
+      imageUrl: track.imageUrl || null,
+      count: track.count || 0,
+      plays: track.count || 0, // Alias for count
+      lastPlayed: track.lastPlayed || null,
+    }));
+
+    res.json(formattedTracks);
   } catch (error) {
     console.error('Error fetching top tracks:', error);
     res.status(500).json({ error: 'Failed to fetch top tracks' });
@@ -164,9 +201,36 @@ router.get('/top-artists', authenticate, async (req, res) => {
       await analysisService.syncTopArtists(time_range, 50);
     }
 
-    // Get top artists from database (ordered by playCount)
-    const artists = await analysisService.getTopArtists(parseInt(limit));
-    res.json(artists);
+    // Get top artists from database or Spotify
+    let artists = await analysisService.getTopArtists(parseInt(limit));
+    
+    // If no artists found in database and sync wasn't requested, try fetching from Spotify directly
+    if ((!artists || artists.length === 0) && sync !== 'true') {
+      try {
+        const spotifyService = new SpotifyService(req.user);
+        artists = await spotifyService.getTopArtists(time_range, parseInt(limit));
+        // Cache the results
+        const { localCache } = await import('../utils/dbFallback.js');
+        await localCache.save(req.user.id, 'topArtists', artists);
+      } catch (spotifyError) {
+        console.error('Error fetching top artists from Spotify:', spotifyError);
+      }
+    }
+    
+    // Ensure all artists have required fields
+    const formattedArtists = artists.map(artist => ({
+      id: artist.id || artist.artistId,
+      artistId: artist.artistId,
+      name: artist.name,
+      genres: artist.genres || [],
+      imageUrl: artist.imageUrl || null,
+      playCount: artist.playCount || 0,
+      popularity: artist.popularity || null,
+      createdAt: artist.createdAt || new Date().toISOString(),
+      updatedAt: artist.updatedAt || new Date().toISOString(),
+    }));
+    
+    res.json(formattedArtists);
   } catch (error) {
     console.error('Error fetching top artists:', error);
     res.status(500).json({ error: 'Failed to fetch top artists' });

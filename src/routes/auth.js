@@ -44,10 +44,13 @@ router.get('/login', (req, res) => {
  * POST /api/auth/spotify
  * Exchange Spotify authorization code for JWT token (alternative to callback)
  * For iOS App direct token exchange
+ * 
+ * Body: { code, redirect_uri? }
+ * - redirect_uri: Optional, if not provided uses SPOTIFY_REDIRECT_URI from env
  */
 router.post('/spotify', async (req, res) => {
   try {
-    const { code } = req.body;
+    const { code, redirect_uri } = req.body;
 
     if (!code) {
       return res.status(400).json({ error: 'Authorization code required' });
@@ -56,6 +59,13 @@ router.post('/spotify', async (req, res) => {
     if (!SPOTIFY_CLIENT_ID || !SPOTIFY_CLIENT_SECRET) {
       console.error('Spotify credentials not configured');
       return res.status(500).json({ error: 'Server configuration error' });
+    }
+
+    // Use provided redirect_uri or fallback to env variable
+    const redirectUri = redirect_uri || SPOTIFY_REDIRECT_URI;
+    
+    if (!redirectUri) {
+      return res.status(400).json({ error: 'Redirect URI required (provide in body or configure SPOTIFY_REDIRECT_URI)' });
     }
 
     // Exchange code for tokens
@@ -68,7 +78,7 @@ router.post('/spotify', async (req, res) => {
       new URLSearchParams({
         grant_type: 'authorization_code',
         code: code,
-        redirect_uri: SPOTIFY_REDIRECT_URI,
+        redirect_uri: redirectUri,
       }),
       {
         headers: {
@@ -120,14 +130,30 @@ router.post('/spotify', async (req, res) => {
           });
         }
       } else {
-        // Database not available, create minimal user object
+        // Database not available, create temporary user object with tokens
+        // Store tokens in a way that can be retrieved later (for temp users, we'll use localCache or just return them)
         console.warn('Database not available, creating temporary user object');
         user = {
           id: `temp_${spotifyUser.id}`,
           spotifyId: spotifyUser.id,
           displayName: spotifyUser.display_name,
           avatarUrl: spotifyUser.images?.[0]?.url || null,
+          accessToken: access_token, // Store in temp user object
+          refreshToken: refresh_token, // Store in temp user object
+          tokenExpiresAt: tokenExpiresAt, // Store in temp user object
         };
+        
+        // Save tokens to local cache for temp users
+        try {
+          const { localCache } = await import('../utils/dbFallback.js');
+          await localCache.save(`temp_${spotifyUser.id}`, 'tokens', {
+            accessToken: access_token,
+            refreshToken: refresh_token,
+            tokenExpiresAt: tokenExpiresAt.toISOString(),
+          });
+        } catch (cacheError) {
+          console.warn('Failed to cache tokens for temp user:', cacheError);
+        }
       }
     } catch (dbError) {
       console.error('Database error in /api/auth/spotify:', dbError);
@@ -137,7 +163,22 @@ router.post('/spotify', async (req, res) => {
         spotifyId: spotifyUser.id,
         displayName: spotifyUser.display_name,
         avatarUrl: spotifyUser.images?.[0]?.url || null,
+        accessToken: access_token,
+        refreshToken: refresh_token,
+        tokenExpiresAt: tokenExpiresAt,
       };
+      
+      // Save tokens to local cache for temp users
+      try {
+        const { localCache } = await import('../utils/dbFallback.js');
+        await localCache.save(`temp_${spotifyUser.id}`, 'tokens', {
+          accessToken: access_token,
+          refreshToken: refresh_token,
+          tokenExpiresAt: tokenExpiresAt.toISOString(),
+        });
+      } catch (cacheError) {
+        console.warn('Failed to cache tokens for temp user:', cacheError);
+      }
     }
 
     // Generate JWT token for our API

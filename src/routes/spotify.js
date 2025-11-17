@@ -48,10 +48,15 @@ async function authenticate(req, res, next) {
       return res.status(401).json({ error: 'Invalid token' });
     }
 
-    // Handle database unavailable scenario
-    if (!prisma) {
-      // When database unavailable, create minimal user from token
-      req.user = { id: decoded.userId };
+    // Handle database unavailable scenario or temp users
+    if (!prisma || decoded.userId.startsWith('temp_')) {
+      // When database unavailable or temp user, create minimal user from token
+      // For temp users, extract spotifyId and ensure we have accessToken stored in temp user object
+      req.user = { 
+        id: decoded.userId,
+        // Try to extract spotifyId from temp user ID format (temp_spotifyId)
+        spotifyId: decoded.userId.startsWith('temp_') ? decoded.userId.replace('temp_', '') : null,
+      };
       return next();
     }
 
@@ -61,9 +66,12 @@ async function authenticate(req, res, next) {
       });
 
       if (!user) {
-        console.error('User not found:', decoded.userId);
+        console.warn('User not found in database:', decoded.userId, '- allowing request with minimal user object');
         // Fallback: allow request to continue with minimal user object
-        req.user = { id: decoded.userId };
+        req.user = { 
+          id: decoded.userId,
+          spotifyId: null,
+        };
         return next();
       }
 
@@ -72,7 +80,10 @@ async function authenticate(req, res, next) {
     } catch (dbError) {
       console.error('Database error in authentication:', dbError);
       // Fallback: allow request to continue with minimal user object
-      req.user = { id: decoded.userId };
+      req.user = { 
+        id: decoded.userId,
+        spotifyId: decoded.userId.startsWith('temp_') ? decoded.userId.replace('temp_', '') : null,
+      };
       next();
     }
   } catch (error) {
@@ -128,7 +139,7 @@ router.get('/recently-played', authenticate, async (req, res) => {
 
 /**
  * GET /api/spotify/top-tracks
- * Get top tracks from Spotify
+ * Get top tracks from Spotify (real-time data)
  */
 router.get('/top-tracks', authenticate, async (req, res) => {
   try {
@@ -137,16 +148,28 @@ router.get('/top-tracks', authenticate, async (req, res) => {
     
     const spotifyService = new SpotifyService(req.user);
     const tracks = await spotifyService.getTopTracks(timeRange, limit);
-    res.json(tracks);
+    
+    // Ensure consistent format with imageUrl
+    const formattedTracks = tracks.map(track => ({
+      trackId: track.trackId,
+      name: track.name,
+      artist: track.artist,
+      artistIds: track.artistIds || [],
+      imageUrl: track.imageUrl || null,
+      duration: track.duration || null,
+      popularity: track.popularity || null,
+    }));
+    
+    res.json(formattedTracks);
   } catch (error) {
     console.error('Error fetching top tracks:', error);
-    res.status(500).json({ error: 'Failed to fetch top tracks' });
+    res.status(500).json({ error: 'Failed to fetch top tracks', message: error.message });
   }
 });
 
 /**
  * GET /api/spotify/top-artists
- * Get top artists from Spotify
+ * Get top artists from Spotify (real-time data)
  */
 router.get('/top-artists', authenticate, async (req, res) => {
   try {
@@ -155,10 +178,20 @@ router.get('/top-artists', authenticate, async (req, res) => {
     
     const spotifyService = new SpotifyService(req.user);
     const artists = await spotifyService.getTopArtists(timeRange, limit);
-    res.json(artists);
+    
+    // Ensure consistent format with imageUrl
+    const formattedArtists = artists.map(artist => ({
+      artistId: artist.artistId,
+      name: artist.name,
+      genres: artist.genres || [],
+      imageUrl: artist.imageUrl || null,
+      popularity: artist.popularity || null,
+    }));
+    
+    res.json(formattedArtists);
   } catch (error) {
     console.error('Error fetching top artists:', error);
-    res.status(500).json({ error: 'Failed to fetch top artists' });
+    res.status(500).json({ error: 'Failed to fetch top artists', message: error.message });
   }
 });
 

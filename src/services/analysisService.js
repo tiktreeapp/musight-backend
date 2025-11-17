@@ -379,13 +379,35 @@ export class AnalysisService {
    * Get top artists from database
    */
   async getTopArtists(limit = 20) {
-    const artists = await prisma.artistStat.findMany({
-      where: { userId: this.user.id },
-      take: limit,
-      orderBy: { createdAt: 'desc' },
-    });
+    // If database not available, fetch from Spotify
+    if (!prisma) {
+      console.warn('Database not available, fetching top artists from Spotify');
+      return await this.spotifyService.getTopArtists('medium_term', limit);
+    }
 
-    return artists;
+    try {
+      const artists = await prisma.artistStat.findMany({
+        where: { userId: this.user.id },
+        take: limit,
+        orderBy: { playCount: 'desc' }, // Order by playCount instead of createdAt
+      });
+
+      // Ensure imageUrl is present in all artists
+      return artists.map(artist => ({
+        id: artist.id,
+        artistId: artist.artistId,
+        name: artist.name,
+        genres: artist.genres || [],
+        imageUrl: artist.imageUrl || null,
+        playCount: artist.playCount || 0,
+        createdAt: artist.createdAt,
+        updatedAt: artist.updatedAt,
+      }));
+    } catch (error) {
+      console.error('Error fetching top artists from database, falling back to Spotify:', error);
+      // Fallback to Spotify if database query fails
+      return await this.spotifyService.getTopArtists('medium_term', limit);
+    }
   }
 
   /**

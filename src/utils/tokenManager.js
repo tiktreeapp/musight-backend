@@ -79,21 +79,43 @@ export function isTokenExpired(tokenExpiresAt) {
 /**
  * Get valid access token, refreshing if necessary
  * Automatically updates the database if token is refreshed
+ * Supports temp users by loading tokens from local cache
  */
 export async function getValidAccessToken(user) {
-  if (!user.refreshToken) {
+  // For temp users, try to load tokens from local cache first
+  let currentUser = user;
+  
+  if (user.id && user.id.startsWith('temp_') && (!user.accessToken || !user.refreshToken)) {
+    try {
+      const { localCache } = await import('./dbFallback.js');
+      const cachedTokens = await localCache.load(user.id, 'tokens');
+      
+      if (cachedTokens && cachedTokens.accessToken && cachedTokens.refreshToken) {
+        currentUser = {
+          ...user,
+          accessToken: cachedTokens.accessToken,
+          refreshToken: cachedTokens.refreshToken,
+          tokenExpiresAt: cachedTokens.tokenExpiresAt ? new Date(cachedTokens.tokenExpiresAt) : null,
+        };
+      }
+    } catch (cacheError) {
+      console.warn('Failed to load tokens from cache for temp user:', cacheError.message);
+    }
+  }
+  
+  if (!currentUser.refreshToken) {
     throw new Error('No refresh token available');
   }
 
   // Check if token needs refresh
-  if (isTokenExpired(user.tokenExpiresAt)) {
-    const refreshed = await refreshSpotifyToken(user.refreshToken);
+  if (isTokenExpired(currentUser.tokenExpiresAt)) {
+    const refreshed = await refreshSpotifyToken(currentUser.refreshToken);
     
     // Update database with new token (if available)
-    if (prisma && user.id && !user.id.startsWith('temp_')) {
+    if (prisma && currentUser.id && !currentUser.id.startsWith('temp_')) {
       try {
         await prisma.user.update({
-          where: { id: user.id },
+          where: { id: currentUser.id },
           data: {
             accessToken: refreshed.accessToken,
             tokenExpiresAt: refreshed.tokenExpiresAt,
@@ -105,9 +127,23 @@ export async function getValidAccessToken(user) {
       }
     }
     
+    // For temp users, update local cache
+    if (currentUser.id && currentUser.id.startsWith('temp_')) {
+      try {
+        const { localCache } = await import('./dbFallback.js');
+        await localCache.save(currentUser.id, 'tokens', {
+          accessToken: refreshed.accessToken,
+          refreshToken: currentUser.refreshToken, // Keep the same refresh token
+          tokenExpiresAt: refreshed.tokenExpiresAt.toISOString(),
+        });
+      } catch (cacheError) {
+        console.warn('Failed to cache refreshed token for temp user:', cacheError.message);
+      }
+    }
+    
     return refreshed.accessToken;
   }
 
-  return user.accessToken;
+  return currentUser.accessToken;
 }
 

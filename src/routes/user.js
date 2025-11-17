@@ -39,10 +39,15 @@ async function authenticate(req, res, next) {
       return res.status(401).json({ error: 'Invalid token' });
     }
 
-    // Handle database unavailable scenario
-    if (!prisma) {
-      // When database unavailable, create minimal user from token
-      req.user = { id: decoded.userId };
+    // Handle database unavailable scenario or temp users
+    if (!prisma || decoded.userId.startsWith('temp_')) {
+      // When database unavailable or temp user, create minimal user from token
+      // For temp users, we need to extract spotifyId from the token or use a placeholder
+      req.user = { 
+        id: decoded.userId,
+        // Try to extract spotifyId from temp user ID format (temp_spotifyId)
+        spotifyId: decoded.userId.startsWith('temp_') ? decoded.userId.replace('temp_', '') : null,
+      };
       return next();
     }
 
@@ -52,9 +57,12 @@ async function authenticate(req, res, next) {
       });
 
       if (!user) {
-        console.error('User not found:', decoded.userId);
+        console.warn('User not found in database:', decoded.userId, '- allowing request with minimal user object');
         // Fallback: allow request to continue with minimal user object
-        req.user = { id: decoded.userId };
+        req.user = { 
+          id: decoded.userId,
+          spotifyId: null,
+        };
         return next();
       }
 
@@ -63,7 +71,10 @@ async function authenticate(req, res, next) {
     } catch (dbError) {
       console.error('Database error in authentication:', dbError);
       // Fallback: allow request to continue with minimal user object
-      req.user = { id: decoded.userId };
+      req.user = { 
+        id: decoded.userId,
+        spotifyId: null,
+      };
       next();
     }
   } catch (error) {
