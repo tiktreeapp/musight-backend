@@ -63,7 +63,7 @@ app.use((req, res) => {
 
 /**
  * Daily sync job - runs at 2 AM every day
- * Syncs listening data for all users
+ * Syncs listening data for all users and builds music profiles
  */
 async function syncAllUsersData() {
   console.log('Starting daily sync job...');
@@ -80,11 +80,18 @@ async function syncAllUsersData() {
     for (const user of users) {
       try {
         const analysisService = new AnalysisService(user);
-        const result = await analysisService.syncRecentlyPlayed();
-        console.log(`Synced user ${user.id}: ${result.synced} new tracks`);
+        
+        // Use comprehensive syncUserPlayback which syncs everything and builds profile
+        const result = await analysisService.syncUserPlayback('medium_term');
+        
+        console.log(`Synced user ${user.id}:`, {
+          recent: result.recent.synced,
+          tracks: result.tracks.synced,
+          artists: result.artists.synced,
+        });
         
         // Small delay to avoid rate limiting
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise(resolve => setTimeout(resolve, 2000));
       } catch (error) {
         console.error(`Error syncing user ${user.id}:`, error.message);
         // Continue with next user

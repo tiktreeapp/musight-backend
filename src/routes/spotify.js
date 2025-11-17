@@ -13,14 +13,30 @@ const prisma = new PrismaClient();
 async function authenticate(req, res, next) {
   try {
     const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    if (!authHeader) {
       return res.status(401).json({ error: 'No token provided' });
     }
 
-    const token = authHeader.substring(7);
+    // Handle both "Bearer token" and just "token" formats
+    let token;
+    if (authHeader.startsWith('Bearer ')) {
+      token = authHeader.substring(7);
+    } else {
+      token = authHeader;
+    }
+
+    if (!token || token.trim() === '') {
+      return res.status(401).json({ error: 'No token provided' });
+    }
+
     const decoded = verifyUserToken(token);
 
-    if (!decoded) {
+    if (!decoded || !decoded.userId) {
+      console.error('Token verification failed:', { 
+        tokenPresent: !!token, 
+        tokenLength: token.length,
+        decoded 
+      });
       return res.status(401).json({ error: 'Invalid token' });
     }
 
@@ -29,13 +45,15 @@ async function authenticate(req, res, next) {
     });
 
     if (!user) {
+      console.error('User not found:', decoded.userId);
       return res.status(404).json({ error: 'User not found' });
     }
 
     req.user = user;
     next();
   } catch (error) {
-    res.status(401).json({ error: 'Authentication failed' });
+    console.error('Authentication error:', error.message);
+    res.status(401).json({ error: 'Authentication failed', message: error.message });
   }
 }
 
@@ -147,6 +165,41 @@ router.get('/artist/:artistId', authenticate, async (req, res) => {
   } catch (error) {
     console.error('Error fetching artist:', error);
     res.status(500).json({ error: 'Failed to fetch artist details' });
+  }
+});
+
+/**
+ * GET /api/spotify/playlists
+ * Get user's playlists
+ */
+router.get('/playlists', authenticate, async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 50;
+    const offset = parseInt(req.query.offset) || 0;
+    
+    const spotifyService = new SpotifyService(req.user);
+    const playlists = await spotifyService.getPlaylists(limit, offset);
+    res.json(playlists);
+  } catch (error) {
+    console.error('Error fetching playlists:', error);
+    res.status(500).json({ error: 'Failed to fetch playlists' });
+  }
+});
+
+/**
+ * GET /api/spotify/top-playlists
+ * Get user's top playlists
+ */
+router.get('/top-playlists', authenticate, async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 20;
+    
+    const spotifyService = new SpotifyService(req.user);
+    const playlists = await spotifyService.getTopPlaylists(limit);
+    res.json(playlists);
+  } catch (error) {
+    console.error('Error fetching top playlists:', error);
+    res.status(500).json({ error: 'Failed to fetch top playlists' });
   }
 });
 

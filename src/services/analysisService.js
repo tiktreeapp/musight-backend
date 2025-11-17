@@ -68,25 +68,37 @@ export class AnalysisService {
 
   /**
    * Sync top artists from Spotify
+   * Uses upsert to accumulate playCount instead of replacing
    */
-  async syncTopArtists() {
+  async syncTopArtists(timeRange = 'medium_term', limit = 50) {
     try {
-      const topArtists = await this.spotifyService.getTopArtists('medium_term', 50);
-
-      // Clear existing top artists and save new ones
-      await prisma.artistStat.deleteMany({
-        where: { userId: this.user.id },
-      });
+      const topArtists = await this.spotifyService.getTopArtists(timeRange, limit);
 
       const savedArtists = [];
       for (const artist of topArtists) {
-        const saved = await prisma.artistStat.create({
-          data: {
+        // Upsert: if exists, increment playCount; if not, create with playCount = 1
+        const saved = await prisma.artistStat.upsert({
+          where: {
+            userId_artistId: {
+              userId: this.user.id,
+              artistId: artist.artistId,
+            },
+          },
+          create: {
             userId: this.user.id,
             artistId: artist.artistId,
             name: artist.name,
-            genre: artist.genres?.[0] || null,
+            genres: artist.genres || [],
             imageUrl: artist.imageUrl,
+            playCount: 1,
+          },
+          update: {
+            name: artist.name,
+            genres: artist.genres || [],
+            imageUrl: artist.imageUrl,
+            playCount: {
+              increment: 1,
+            },
           },
         });
         savedArtists.push(saved);
@@ -97,6 +109,169 @@ export class AnalysisService {
       };
     } catch (error) {
       console.error('Error syncing top artists:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Sync top tracks from Spotify and cache audio features
+   * @param {string} timeRange - 'short_term', 'medium_term', 'long_term'
+   * @param {number} limit - Number of tracks to fetch (max 50)
+   */
+  async syncTopTracks(timeRange = 'medium_term', limit = 50) {
+    try {
+      // Get top tracks from Spotify
+      const topTracks = await this.spotifyService.getTopTracks(timeRange, limit);
+
+      const trackIds = topTracks.map(t => t.trackId);
+      const tracksMap = new Map(topTracks.map(t => [t.trackId, t]));
+
+      // Update existing TrackStat records or create new ones for top tracks
+      // We use a fixed "top tracks" timestamp to avoid duplicate entries
+      const topTracksTimestamp = new Date('2000-01-01'); // Fixed date for top tracks
+      const savedTracks = [];
+      
+      for (const track of topTracks) {
+        // Check if track exists in TrackStat (from recently-played or previous sync)
+        const existing = await prisma.trackStat.findFirst({
+          where: {
+            userId: this.user.id,
+            trackId: track.trackId,
+          },
+          orderBy: { playedAt: 'desc' },
+        });
+
+        if (existing) {
+          // Update existing record with latest info
+          await prisma.trackStat.updateMany({
+            where: {
+              userId: this.user.id,
+              trackId: track.trackId,
+            },
+            data: {
+              name: track.name,
+              artist: track.artist,
+              imageUrl: track.imageUrl || existing.imageUrl,
+              duration: track.duration || existing.duration,
+              popularity: track.popularity || existing.popularity,
+            },
+          });
+        } else {
+          // Create new record for top track (if it doesn't exist from recently-played)
+          try {
+            const saved = await prisma.trackStat.create({
+              data: {
+                userId: this.user.id,
+                trackId: track.trackId,
+                name: track.name,
+                artist: track.artist,
+                imageUrl: track.imageUrl,
+                playedAt: topTracksTimestamp, // Use fixed timestamp
+                duration: track.duration,
+                popularity: track.popularity,
+              },
+            });
+            savedTracks.push(saved);
+          } catch (error) {
+            // Ignore unique constraint violations
+            if (!error.code || error.code !== 'P2002') {
+              throw error;
+            }
+          }
+        }
+      }
+
+      // Fetch audio features in batches (max 100 per request)
+      const audioFeaturesMap = new Map();
+      const batchSize = 100;
+      
+      for (let i = 0; i < trackIds.length; i += batchSize) {
+        const batch = trackIds.slice(i, i + batchSize);
+        try {
+          const features = await this.spotifyService.getAudioFeatures(batch);
+          
+          // Map features by track ID
+          features.forEach((feature, index) => {
+            if (feature && feature.id) {
+              audioFeaturesMap.set(feature.id, feature);
+            }
+          });
+
+          // Small delay to avoid rate limiting
+          await new Promise(resolve => setTimeout(resolve, 100));
+        } catch (error) {
+          console.error(`Error fetching audio features for batch ${i}-${i + batchSize}:`, error.message);
+          // Continue with next batch even if one fails
+        }
+      }
+
+      // Update tracks with audio features
+      let updatedCount = 0;
+      for (const trackId of trackIds) {
+        const features = audioFeaturesMap.get(trackId);
+        if (features) {
+          try {
+            await prisma.trackStat.updateMany({
+              where: {
+                userId: this.user.id,
+                trackId: trackId,
+              },
+              data: {
+                danceability: features.danceability || null,
+                energy: features.energy || null,
+                valence: features.valence || null,
+                tempo: features.tempo || null,
+              },
+            });
+            updatedCount++;
+          } catch (error) {
+            console.error(`Error updating audio features for track ${trackId}:`, error.message);
+          }
+        }
+      }
+
+      return {
+        synced: savedTracks.length,
+        total: topTracks.length,
+        audioFeaturesUpdated: updatedCount,
+      };
+    } catch (error) {
+      console.error('Error syncing top tracks:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Comprehensive sync function that syncs all user playback data
+   * Syncs recently-played, top tracks, top artists, and builds music profile
+   * @param {string} timeRange - 'short_term', 'medium_term', 'long_term' for top data
+   */
+  async syncUserPlayback(timeRange = 'medium_term') {
+    try {
+      console.log(`Starting sync for user ${this.user.id}...`);
+
+      // 1. Sync recently played tracks
+      const recentResult = await this.syncRecentlyPlayed();
+      console.log(`Synced ${recentResult.synced} new recently-played tracks`);
+
+      // 2. Sync top tracks and cache audio features
+      const tracksResult = await this.syncTopTracks(timeRange, 50);
+      console.log(`Synced ${tracksResult.synced} top tracks, updated ${tracksResult.audioFeaturesUpdated} audio features`);
+
+      // 3. Sync top artists
+      const artistsResult = await this.syncTopArtists(timeRange, 50);
+      console.log(`Synced ${artistsResult.synced} top artists`);
+
+      // 4. Build music profile
+      await this.buildMusicProfile();
+
+      return {
+        recent: recentResult,
+        tracks: tracksResult,
+        artists: artistsResult,
+      };
+    } catch (error) {
+      console.error('Error in syncUserPlayback:', error);
       throw error;
     }
   }
@@ -224,6 +399,178 @@ export class AnalysisService {
     });
 
     return tracks;
+  }
+
+  /**
+   * Build user's music profile from aggregated data
+   * Aggregates top tracks, top artists, genre distribution, and audio features
+   */
+  async buildMusicProfile() {
+    try {
+      // 1. Get top tracks from TrackStat (aggregated by play count)
+      const allTracks = await prisma.trackStat.findMany({
+        where: { userId: this.user.id },
+        select: {
+          trackId: true,
+          name: true,
+          artist: true,
+          imageUrl: true,
+        },
+      });
+
+      // Count plays per track
+      const trackCounts = {};
+      allTracks.forEach(track => {
+        const key = track.trackId;
+        if (!trackCounts[key]) {
+          trackCounts[key] = {
+            trackId: track.trackId,
+            name: track.name,
+            artist: track.artist,
+            imageUrl: track.imageUrl,
+            plays: 0,
+          };
+        }
+        trackCounts[key].plays++;
+      });
+
+      const topTracks = Object.values(trackCounts)
+        .sort((a, b) => b.plays - a.plays)
+        .slice(0, 20);
+
+      // 2. Get top artists from ArtistStat (ordered by playCount)
+      const topArtists = await prisma.artistStat.findMany({
+        where: { userId: this.user.id },
+        orderBy: { playCount: 'desc' },
+        take: 20,
+        select: {
+          artistId: true,
+          name: true,
+          genres: true,
+          imageUrl: true,
+          playCount: true,
+        },
+      });
+
+      const topArtistsJson = topArtists.map(artist => ({
+        artistId: artist.artistId,
+        name: artist.name,
+        plays: artist.playCount,
+        genres: artist.genres,
+        imageUrl: artist.imageUrl,
+      }));
+
+      // 3. Calculate genre distribution (weighted by artist playCount)
+      const genreWeights = {};
+      let totalGenreWeight = 0;
+
+      topArtists.forEach(artist => {
+        const weight = artist.playCount || 1;
+        totalGenreWeight += weight * (artist.genres?.length || 1);
+
+        artist.genres?.forEach(genre => {
+          if (!genreWeights[genre]) {
+            genreWeights[genre] = 0;
+          }
+          genreWeights[genre] += weight;
+        });
+      });
+
+      // Normalize to percentages
+      const genreDist = {};
+      if (totalGenreWeight > 0) {
+        Object.keys(genreWeights).forEach(genre => {
+          genreDist[genre] = genreWeights[genre] / totalGenreWeight;
+        });
+      }
+
+      // Sort genres by weight (descending)
+      const sortedGenres = Object.entries(genreDist)
+        .sort((a, b) => b[1] - a[1])
+        .reduce((acc, [genre, weight]) => {
+          acc[genre] = weight;
+          return acc;
+        }, {});
+
+      // 4. Calculate average energy and valence (weighted by play count)
+      const tracksWithFeatures = await prisma.trackStat.findMany({
+        where: {
+          userId: this.user.id,
+          energy: { not: null },
+          valence: { not: null },
+        },
+        select: {
+          energy: true,
+          valence: true,
+        },
+      });
+
+      let totalEnergy = 0;
+      let totalValence = 0;
+      let totalWeight = 0;
+
+      // For weighted average, we can use play count as weight
+      // Since we don't have play count per track in TrackStat, we'll use equal weights
+      // Or we can count occurrences (each TrackStat record = one play)
+      const trackFeatureMap = {};
+      allTracks.forEach(track => {
+        if (!trackFeatureMap[track.trackId]) {
+          trackFeatureMap[track.trackId] = { plays: 0, energy: null, valence: null };
+        }
+        trackFeatureMap[track.trackId].plays++;
+      });
+
+      // Get features for tracks
+      const tracksWithEnergyValence = await prisma.trackStat.findMany({
+        where: {
+          userId: this.user.id,
+          energy: { not: null },
+          valence: { not: null },
+        },
+        select: {
+          trackId: true,
+          energy: true,
+          valence: true,
+        },
+      });
+
+      // Calculate weighted average
+      tracksWithEnergyValence.forEach(track => {
+        const plays = trackFeatureMap[track.trackId]?.plays || 1;
+        const weight = plays;
+        totalEnergy += (track.energy || 0) * weight;
+        totalValence += (track.valence || 0) * weight;
+        totalWeight += weight;
+      });
+
+      const avgEnergy = totalWeight > 0 ? totalEnergy / totalWeight : null;
+      const avgValence = totalWeight > 0 ? totalValence / totalWeight : null;
+
+      // 5. Upsert MusicProfile
+      const profile = await prisma.musicProfile.upsert({
+        where: { userId: this.user.id },
+        create: {
+          userId: this.user.id,
+          topTracks: topTracks,
+          topArtists: topArtistsJson,
+          genreDist: sortedGenres,
+          avgEnergy: avgEnergy,
+          avgValence: avgValence,
+        },
+        update: {
+          topTracks: topTracks,
+          topArtists: topArtistsJson,
+          genreDist: sortedGenres,
+          avgEnergy: avgEnergy,
+          avgValence: avgValence,
+        },
+      });
+
+      return profile;
+    } catch (error) {
+      console.error('Error building music profile:', error);
+      throw error;
+    }
   }
 
   /**
