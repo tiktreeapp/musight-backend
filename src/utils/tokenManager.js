@@ -53,6 +53,7 @@ export async function refreshSpotifyToken(refreshToken) {
           'Authorization': `Basic ${authString}`,
           'Content-Type': 'application/x-www-form-urlencoded',
         },
+        timeout: 10000, // 10 second timeout
       }
     );
 

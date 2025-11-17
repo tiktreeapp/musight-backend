@@ -17,6 +17,14 @@ dotenv.config();
 
 const app = express();
 
+// Set default timeout for all requests (30 seconds)
+app.use((req, res, next) => {
+  req.setTimeout(30000, () => {
+    console.error(`Request timeout for ${req.method} ${req.path}`);
+  });
+  next();
+});
+
 // Initialize Prisma with error handling
 // Don't fail on startup if DATABASE_URL is missing - will use cache fallback
 let prisma = null;

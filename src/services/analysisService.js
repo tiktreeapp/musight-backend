@@ -25,7 +25,13 @@ export class AnalysisService {
       });
 
       const after = lastTrack ? lastTrack.playedAt.getTime() : null;
-      const tracks = await this.spotifyService.getRecentlyPlayed(50, after);
+      // Use a promise with timeout to ensure the call doesn't hang
+      const tracks = await Promise.race([
+        this.spotifyService.getRecentlyPlayed(50, after),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Timeout fetching recently played tracks')), 25000)
+        )
+      ]);
 
       // Save new tracks
       const savedTracks = [];
@@ -72,7 +78,13 @@ export class AnalysisService {
    */
   async syncTopArtists(timeRange = 'medium_term', limit = 50) {
     try {
-      const topArtists = await this.spotifyService.getTopArtists(timeRange, limit);
+      // Use a promise with timeout to ensure the call doesn't hang
+      const topArtists = await Promise.race([
+        this.spotifyService.getTopArtists(timeRange, limit),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Timeout fetching top artists')), 25000)
+        )
+      ]);
 
       const savedArtists = [];
       for (const artist of topArtists) {
@@ -120,8 +132,13 @@ export class AnalysisService {
    */
   async syncTopTracks(timeRange = 'medium_term', limit = 50) {
     try {
-      // Get top tracks from Spotify
-      const topTracks = await this.spotifyService.getTopTracks(timeRange, limit);
+      // Use a promise with timeout to ensure the call doesn't hang
+      const topTracks = await Promise.race([
+        this.spotifyService.getTopTracks(timeRange, limit),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Timeout fetching top tracks')), 25000)
+        )
+      ]);
 
       const trackIds = topTracks.map(t => t.trackId);
       const tracksMap = new Map(topTracks.map(t => [t.trackId, t]));
@@ -188,7 +205,13 @@ export class AnalysisService {
       for (let i = 0; i < trackIds.length; i += batchSize) {
         const batch = trackIds.slice(i, i + batchSize);
         try {
-          const features = await this.spotifyService.getAudioFeatures(batch);
+          // Use a promise with timeout to ensure the call doesn't hang
+          const features = await Promise.race([
+            this.spotifyService.getAudioFeatures(batch),
+            new Promise((_, reject) => 
+              setTimeout(() => reject(new Error(`Timeout fetching audio features for batch ${i}-${i + batchSize}`)), 25000)
+            )
+          ]);
           
           // Map features by track ID
           features.forEach((feature, index) => {
@@ -608,7 +631,13 @@ export class AnalysisService {
     // Get Spotify top tracks for comparison
     let spotifyTopTracks = [];
     try {
-      spotifyTopTracks = await this.spotifyService.getTopTracks('medium_term', 10);
+      // Use a promise with timeout to ensure the call doesn't hang
+      spotifyTopTracks = await Promise.race([
+        this.spotifyService.getTopTracks('medium_term', 10),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Timeout fetching Spotify top tracks')), 25000)
+        )
+      ]);
     } catch (error) {
       console.error('Error fetching Spotify top tracks:', error);
     }

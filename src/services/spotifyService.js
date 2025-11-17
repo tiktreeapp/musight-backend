@@ -22,6 +22,15 @@ export class SpotifyService {
   }
 
   /**
+   * Create axios instance with default timeout
+   */
+  getAxiosInstance() {
+    return axios.create({
+      timeout: 10000, // 10 second timeout for all requests
+    });
+  }
+
+  /**
    * Make a request with rate limiting and exponential backoff retry
    * @param {Function} requestFn - Function that returns a promise for the request
    * @param {number} maxRetries - Maximum number of retries (default: 3)
@@ -74,8 +83,9 @@ export class SpotifyService {
    */
   async getCurrentUser() {
     const headers = await this.getAuthHeaders();
+    const axiosInstance = this.getAxiosInstance();
     const response = await this.makeRequestWithRetry(() => 
-      axios.get('https://api.spotify.com/v1/me', { headers })
+      axiosInstance.get('https://api.spotify.com/v1/me', { headers })
     );
     return response.data;
   }
@@ -92,8 +102,9 @@ export class SpotifyService {
       params.after = after;
     }
 
+    const axiosInstance = this.getAxiosInstance();
     const response = await this.makeRequestWithRetry(() =>
-      axios.get('https://api.spotify.com/v1/me/player/recently-played', {
+      axiosInstance.get('https://api.spotify.com/v1/me/player/recently-played', {
         headers,
         params,
       })
@@ -118,8 +129,9 @@ export class SpotifyService {
    */
   async getTopTracks(timeRange = 'medium_term', limit = 50) {
     const headers = await this.getAuthHeaders();
+    const axiosInstance = this.getAxiosInstance();
     const response = await this.makeRequestWithRetry(() =>
-      axios.get('https://api.spotify.com/v1/me/top/tracks', {
+      axiosInstance.get('https://api.spotify.com/v1/me/top/tracks', {
         headers,
         params: { time_range: timeRange, limit },
       })
@@ -143,8 +155,9 @@ export class SpotifyService {
    */
   async getTopArtists(timeRange = 'medium_term', limit = 50) {
     const headers = await this.getAuthHeaders();
+    const axiosInstance = this.getAxiosInstance();
     const response = await this.makeRequestWithRetry(() =>
-      axios.get('https://api.spotify.com/v1/me/top/artists', {
+      axiosInstance.get('https://api.spotify.com/v1/me/top/artists', {
         headers,
         params: { time_range: timeRange, limit },
       })
@@ -165,8 +178,9 @@ export class SpotifyService {
    */
   async getAudioFeatures(trackIds) {
     const headers = await this.getAuthHeaders();
+    const axiosInstance = this.getAxiosInstance();
     const response = await this.makeRequestWithRetry(() =>
-      axios.get('https://api.spotify.com/v1/audio-features', {
+      axiosInstance.get('https://api.spotify.com/v1/audio-features', {
         headers,
         params: { ids: trackIds.join(',') },
       })
@@ -181,8 +195,9 @@ export class SpotifyService {
    */
   async getTrack(trackId) {
     const headers = await this.getAuthHeaders();
+    const axiosInstance = this.getAxiosInstance();
     const response = await this.makeRequestWithRetry(() =>
-      axios.get(`https://api.spotify.com/v1/tracks/${trackId}`, { headers })
+      axiosInstance.get(`https://api.spotify.com/v1/tracks/${trackId}`, { headers })
     );
     return response.data;
   }
@@ -193,8 +208,9 @@ export class SpotifyService {
    */
   async getArtist(artistId) {
     const headers = await this.getAuthHeaders();
+    const axiosInstance = this.getAxiosInstance();
     const response = await this.makeRequestWithRetry(() =>
-      axios.get(`https://api.spotify.com/v1/artists/${artistId}`, { headers })
+      axiosInstance.get(`https://api.spotify.com/v1/artists/${artistId}`, { headers })
     );
     return response.data;
   }
@@ -206,8 +222,9 @@ export class SpotifyService {
    */
   async getPlaylists(limit = 50, offset = 0) {
     const headers = await this.getAuthHeaders();
+    const axiosInstance = this.getAxiosInstance();
     const response = await this.makeRequestWithRetry(() =>
-      axios.get('https://api.spotify.com/v1/me/playlists', {
+      axiosInstance.get('https://api.spotify.com/v1/me/playlists', {
         headers,
         params: { limit, offset },
       })

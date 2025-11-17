@@ -97,6 +97,11 @@ async function authenticate(req, res, next) {
  * Sync user's listening data from Spotify
  */
 router.post('/sync', authenticate, async (req, res) => {
+  // Set timeout for the entire request
+  req.setTimeout(60000, () => { // 60 seconds timeout
+    console.error('Request timeout for /api/spotify/sync');
+  });
+
   try {
     const analysisService = new AnalysisService(req.user);
     
@@ -124,6 +129,11 @@ router.post('/sync', authenticate, async (req, res) => {
  * Get recently played tracks from Spotify (fresh data)
  */
 router.get('/recently-played', authenticate, async (req, res) => {
+  // Set timeout for the entire request
+  req.setTimeout(30000, () => { // 30 seconds timeout
+    console.error('Request timeout for /api/spotify/recently-played');
+  });
+
   try {
     const limit = parseInt(req.query.limit) || 50;
     const after = req.query.after ? parseInt(req.query.after) : null;
@@ -142,6 +152,11 @@ router.get('/recently-played', authenticate, async (req, res) => {
  * Get top tracks from Spotify (real-time data)
  */
 router.get('/top-tracks', authenticate, async (req, res) => {
+  // Set timeout for the entire request
+  req.setTimeout(30000, () => { // 30 seconds timeout
+    console.error('Request timeout for /api/spotify/top-tracks');
+  });
+
   try {
     const timeRange = req.query.time_range || 'medium_term';
     const limit = parseInt(req.query.limit) || 50;
@@ -172,6 +187,11 @@ router.get('/top-tracks', authenticate, async (req, res) => {
  * Get top artists from Spotify (real-time data)
  */
 router.get('/top-artists', authenticate, async (req, res) => {
+  // Set timeout for the entire request
+  req.setTimeout(30000, () => { // 30 seconds timeout
+    console.error('Request timeout for /api/spotify/top-artists');
+  });
+
   try {
     const timeRange = req.query.time_range || 'medium_term';
     const limit = parseInt(req.query.limit) || 50;
@@ -200,6 +220,11 @@ router.get('/top-artists', authenticate, async (req, res) => {
  * Get track details
  */
 router.get('/track/:trackId', authenticate, async (req, res) => {
+  // Set timeout for the entire request
+  req.setTimeout(30000, () => { // 30 seconds timeout
+    console.error('Request timeout for /api/spotify/track/:trackId');
+  });
+
   try {
     const spotifyService = new SpotifyService(req.user);
     const track = await spotifyService.getTrack(req.params.trackId);
@@ -215,6 +240,11 @@ router.get('/track/:trackId', authenticate, async (req, res) => {
  * Get artist details
  */
 router.get('/artist/:artistId', authenticate, async (req, res) => {
+  // Set timeout for the entire request
+  req.setTimeout(30000, () => { // 30 seconds timeout
+    console.error('Request timeout for /api/spotify/artist/:artistId');
+  });
+
   try {
     const spotifyService = new SpotifyService(req.user);
     const artist = await spotifyService.getArtist(req.params.artistId);
@@ -230,6 +260,11 @@ router.get('/artist/:artistId', authenticate, async (req, res) => {
  * Get user's playlists
  */
 router.get('/playlists', authenticate, async (req, res) => {
+  // Set timeout for the entire request
+  req.setTimeout(30000, () => { // 30 seconds timeout
+    console.error('Request timeout for /api/spotify/playlists');
+  });
+
   try {
     const limit = parseInt(req.query.limit) || 50;
     const offset = parseInt(req.query.offset) || 0;
@@ -248,6 +283,11 @@ router.get('/playlists', authenticate, async (req, res) => {
  * Get user's top playlists
  */
 router.get('/top-playlists', authenticate, async (req, res) => {
+  // Set timeout for the entire request
+  req.setTimeout(30000, () => { // 30 seconds timeout
+    console.error('Request timeout for /api/spotify/top-playlists');
+  });
+
   try {
     const limit = parseInt(req.query.limit) || 20;
     

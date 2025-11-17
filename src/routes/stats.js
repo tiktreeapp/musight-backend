@@ -97,6 +97,11 @@ async function authenticate(req, res, next) {
  * Get comprehensive dashboard data
  */
 router.get('/dashboard', authenticate, async (req, res) => {
+  // Set timeout for the entire request
+  req.setTimeout(45000, () => { // 45 seconds timeout
+    console.error('Request timeout for /api/stats/dashboard');
+  });
+
   try {
     const analysisService = new AnalysisService(req.user);
     const dashboard = await analysisService.getDashboard();
@@ -113,6 +118,11 @@ router.get('/dashboard', authenticate, async (req, res) => {
  * Query params: timeRange (24h, 7d, 30d, all)
  */
 router.get('/listening', authenticate, async (req, res) => {
+  // Set timeout for the entire request
+  req.setTimeout(30000, () => { // 30 seconds timeout
+    console.error('Request timeout for /api/stats/listening');
+  });
+
   try {
     const { timeRange = '7d' } = req.query;
     const analysisService = new AnalysisService(req.user);
@@ -131,6 +141,11 @@ router.get('/listening', authenticate, async (req, res) => {
  * Can optionally sync from Spotify first by adding ?sync=true
  */
 router.get('/top-tracks', authenticate, async (req, res) => {
+  // Set timeout for the entire request
+  req.setTimeout(45000, () => { // 45 seconds timeout
+    console.error('Request timeout for /api/stats/top-tracks');
+  });
+
   try {
     const { time_range = 'medium_term', limit = 20, sync = false } = req.query;
     const analysisService = new AnalysisService(req.user);
@@ -192,6 +207,11 @@ router.get('/top-tracks', authenticate, async (req, res) => {
  * Can optionally sync from Spotify first by adding ?sync=true
  */
 router.get('/top-artists', authenticate, async (req, res) => {
+  // Set timeout for the entire request
+  req.setTimeout(45000, () => { // 45 seconds timeout
+    console.error('Request timeout for /api/stats/top-artists');
+  });
+
   try {
     const { time_range = 'medium_term', limit = 20, sync = false } = req.query;
     const analysisService = new AnalysisService(req.user);
@@ -207,8 +227,13 @@ router.get('/top-artists', authenticate, async (req, res) => {
     // If no artists found in database and sync wasn't requested, try fetching from Spotify directly
     if ((!artists || artists.length === 0) && sync !== 'true') {
       try {
-        const spotifyService = new SpotifyService(req.user);
-        artists = await spotifyService.getTopArtists(time_range, parseInt(limit));
+        // Use a promise with timeout to ensure the call doesn't hang
+        artists = await Promise.race([
+          analysisService.spotifyService.getTopArtists(time_range, parseInt(limit)),
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Timeout fetching top artists from Spotify')), 25000)
+          )
+        ]);
         // Cache the results
         const { localCache } = await import('../utils/dbFallback.js');
         await localCache.save(req.user.id, 'topArtists', artists);
@@ -244,13 +269,24 @@ router.get('/top-artists', authenticate, async (req, res) => {
  * Falls back to cache if database unavailable
  */
 router.get('/recent', authenticate, async (req, res) => {
+  // Set timeout for the entire request
+  req.setTimeout(45000, () => { // 45 seconds timeout
+    console.error('Request timeout for /api/stats/recent');
+  });
+
   try {
     const limit = parseInt(req.query.limit) || 50;
     const analysisService = new AnalysisService(req.user);
     const userId = req.user.id;
     
     // Get directly from Spotify API (real-time data)
-    const tracks = await analysisService.spotifyService.getRecentlyPlayed(limit);
+    // Use a promise with timeout to ensure the call doesn't hang
+    const tracks = await Promise.race([
+      analysisService.spotifyService.getRecentlyPlayed(limit),
+      new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Timeout fetching recent tracks from Spotify')), 25000)
+      )
+    ]);
     
     // Cache the results if database available
     const isDbAvailable = await checkDatabase();
@@ -294,6 +330,11 @@ router.get('/recent', authenticate, async (req, res) => {
  * Get top playlists (alias for /api/spotify/top-playlists)
  */
 router.get('/top-playlists', authenticate, async (req, res) => {
+  // Set timeout for the entire request
+  req.setTimeout(30000, () => { // 30 seconds timeout
+    console.error('Request timeout for /api/stats/top-playlists');
+  });
+
   try {
     const limit = parseInt(req.query.limit) || 20;
     
@@ -313,6 +354,11 @@ router.get('/top-playlists', authenticate, async (req, res) => {
  * Falls back to local cache if database unavailable
  */
 router.get('/profile', authenticate, async (req, res) => {
+  // Set timeout for the entire request
+  req.setTimeout(60000, () => { // 60 seconds timeout
+    console.error('Request timeout for /api/stats/profile');
+  });
+
   try {
     const analysisService = new AnalysisService(req.user);
     const userId = req.user.id;
@@ -343,12 +389,26 @@ router.get('/profile', authenticate, async (req, res) => {
           // Try to build profile from cached data
           console.log(`Cache not found for user ${userId}, fetching from Spotify...`);
           
-          // Fetch data from Spotify
-          const spotifyService = new SpotifyService(req.user);
+          // Fetch data from Spotify with timeout protection
           const [topTracks, topArtists, recentTracks] = await Promise.all([
-            spotifyService.getTopTracks('medium_term', 20).catch(() => []),
-            spotifyService.getTopArtists('medium_term', 20).catch(() => []),
-            spotifyService.getRecentlyPlayed(50).catch(() => []),
+            Promise.race([
+              analysisService.spotifyService.getTopTracks('medium_term', 20),
+              new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('Timeout fetching top tracks from Spotify')), 25000)
+              )
+            ]).catch(() => []),
+            Promise.race([
+              analysisService.spotifyService.getTopArtists('medium_term', 20),
+              new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('Timeout fetching top artists from Spotify')), 25000)
+              )
+            ]).catch(() => []),
+            Promise.race([
+              analysisService.spotifyService.getRecentlyPlayed(50),
+              new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('Timeout fetching recently played from Spotify')), 25000)
+              )
+            ]).catch(() => []),
           ]);
 
           // Cache individual data
