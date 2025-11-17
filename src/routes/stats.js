@@ -6,7 +6,15 @@ import { SpotifyService } from '../services/spotifyService.js';
 import { withCacheFallback, checkDatabase } from '../utils/dbFallback.js';
 
 const router = express.Router();
-const prisma = new PrismaClient();
+
+// Initialize Prisma with error handling
+let prisma;
+try {
+  prisma = new PrismaClient();
+} catch (error) {
+  console.error('Failed to initialize Prisma in stats routes:', error);
+  prisma = null;
+}
 
 /**
  * Middleware to authenticate requests

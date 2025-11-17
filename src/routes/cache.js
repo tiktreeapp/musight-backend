@@ -1,8 +1,18 @@
 import express from 'express';
 import { verifyUserToken } from '../utils/tokenManager.js';
 import { prisma, localCache, checkDatabase } from '../utils/dbFallback.js';
+import { PrismaClient } from '@prisma/client';
 
 const router = express.Router();
+
+// Initialize Prisma with error handling (for this route file)
+let localPrisma;
+try {
+  localPrisma = new PrismaClient();
+} catch (error) {
+  console.error('Failed to initialize Prisma in cache routes:', error);
+  localPrisma = null;
+}
 
 /**
  * Middleware to authenticate requests
@@ -35,14 +45,21 @@ async function authenticate(req, res, next) {
     // Try database first, then fallback to just using userId
     try {
       const isDbAvailable = await checkDatabase();
-      if (isDbAvailable) {
-        const user = await prisma.user.findUnique({
-          where: { id: decoded.userId },
-        });
-        if (!user) {
-          return res.status(404).json({ error: 'User not found' });
+      if (isDbAvailable && localPrisma) {
+        try {
+          const user = await localPrisma.user.findUnique({
+            where: { id: decoded.userId },
+          });
+          if (!user) {
+            // Fallback to minimal user object
+            req.user = { id: decoded.userId };
+          } else {
+            req.user = user;
+          }
+        } catch (dbError) {
+          // Fallback to minimal user object
+          req.user = { id: decoded.userId };
         }
-        req.user = user;
       } else {
         // Use minimal user object when DB unavailable
         req.user = { id: decoded.userId };
@@ -108,7 +125,7 @@ router.get('/:dataType', authenticate, async (req, res) => {
 router.post('/import', authenticate, async (req, res) => {
   try {
     const isDbAvailable = await checkDatabase();
-    if (!isDbAvailable) {
+    if (!isDbAvailable || !localPrisma) {
       return res.status(503).json({ 
         error: 'Database not available',
         message: 'Cannot import when database is unavailable' 
@@ -126,7 +143,7 @@ router.post('/import', authenticate, async (req, res) => {
     // Import profile if exists
     if (allCached.profile) {
       try {
-        await prisma.musicProfile.upsert({
+        await localPrisma.musicProfile.upsert({
           where: { userId },
           create: {
             userId,
@@ -156,7 +173,7 @@ router.post('/import', authenticate, async (req, res) => {
         let importedCount = 0;
         for (const track of allCached.recentTracks) {
           try {
-            await prisma.trackStat.upsert({
+            await localPrisma.trackStat.upsert({
               where: {
                 userId_trackId_playedAt: {
                   userId,

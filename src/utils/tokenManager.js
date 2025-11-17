@@ -6,7 +6,14 @@ const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 const SPOTIFY_CLIENT_ID = process.env.SPOTIFY_CLIENT_ID;
 const SPOTIFY_CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET;
 
-const prisma = new PrismaClient();
+// Initialize Prisma with error handling
+let prisma;
+try {
+  prisma = new PrismaClient();
+} catch (error) {
+  console.error('Failed to initialize Prisma in tokenManager:', error);
+  prisma = null;
+}
 
 /**
  * Generate JWT token for user
@@ -82,14 +89,21 @@ export async function getValidAccessToken(user) {
   if (isTokenExpired(user.tokenExpiresAt)) {
     const refreshed = await refreshSpotifyToken(user.refreshToken);
     
-    // Update database with new token
-    await prisma.user.update({
-      where: { id: user.id },
-      data: {
-        accessToken: refreshed.accessToken,
-        tokenExpiresAt: refreshed.tokenExpiresAt,
-      },
-    });
+    // Update database with new token (if available)
+    if (prisma && user.id && !user.id.startsWith('temp_')) {
+      try {
+        await prisma.user.update({
+          where: { id: user.id },
+          data: {
+            accessToken: refreshed.accessToken,
+            tokenExpiresAt: refreshed.tokenExpiresAt,
+          },
+        });
+      } catch (dbError) {
+        console.warn('Failed to update token in database:', dbError.message);
+        // Continue even if database update fails
+      }
+    }
     
     return refreshed.accessToken;
   }
