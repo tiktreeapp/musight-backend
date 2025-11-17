@@ -10,6 +10,7 @@ import authRoutes from './routes/auth.js';
 import userRoutes from './routes/user.js';
 import statsRoutes from './routes/stats.js';
 import spotifyRoutes from './routes/spotify.js';
+import cacheRoutes from './routes/cache.js';
 
 // Load environment variables
 dotenv.config();
@@ -33,6 +34,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/stats', statsRoutes);
 app.use('/api/spotify', spotifyRoutes);
+app.use('/api/cache', cacheRoutes);
 
 // Root endpoint
 app.get('/', (req, res) => {

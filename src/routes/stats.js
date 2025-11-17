@@ -3,6 +3,7 @@ import { PrismaClient } from '@prisma/client';
 import { verifyUserToken } from '../utils/tokenManager.js';
 import { AnalysisService } from '../services/analysisService.js';
 import { SpotifyService } from '../services/spotifyService.js';
+import { withCacheFallback, checkDatabase } from '../utils/dbFallback.js';
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -168,18 +169,51 @@ router.get('/top-artists', authenticate, async (req, res) => {
  * GET /api/stats/recent
  * Get recent tracks from Spotify (proxy endpoint)
  * Query params: limit (max 50)
+ * Falls back to cache if database unavailable
  */
 router.get('/recent', authenticate, async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 50;
     const analysisService = new AnalysisService(req.user);
+    const userId = req.user.id;
     
     // Get directly from Spotify API (real-time data)
     const tracks = await analysisService.spotifyService.getRecentlyPlayed(limit);
+    
+    // Cache the results if database available
+    const isDbAvailable = await checkDatabase();
+    if (isDbAvailable) {
+      // Save to database (this will happen in syncRecentlyPlayed)
+      try {
+        await analysisService.syncRecentlyPlayed();
+      } catch (dbError) {
+        console.warn('Failed to save to database, caching instead:', dbError.message);
+        const { localCache } = await import('../utils/dbFallback.js');
+        await localCache.save(userId, 'recentTracks', tracks);
+      }
+    } else {
+      // Cache to local file
+      const { localCache } = await import('../utils/dbFallback.js');
+      await localCache.save(userId, 'recentTracks', tracks);
+    }
+    
     res.json(tracks);
   } catch (error) {
     console.error('Error fetching recent tracks:', error);
-    res.status(500).json({ error: 'Failed to fetch recent tracks' });
+    
+    // Try to return cached data as fallback
+    try {
+      const { localCache } = await import('../utils/dbFallback.js');
+      const cached = await localCache.load(req.user.id, 'recentTracks');
+      if (cached) {
+        console.log('Returning cached recent tracks');
+        return res.json(cached);
+      }
+    } catch (cacheError) {
+      console.error('Cache fallback failed:', cacheError);
+    }
+    
+    res.status(500).json({ error: 'Failed to fetch recent tracks', message: error.message });
   }
 });
 
@@ -204,24 +238,82 @@ router.get('/top-playlists', authenticate, async (req, res) => {
  * GET /api/stats/profile
  * Get user's music profile
  * If profile doesn't exist, triggers syncUserPlayback + buildMusicProfile
+ * Falls back to local cache if database unavailable
  */
 router.get('/profile', authenticate, async (req, res) => {
   try {
     const analysisService = new AnalysisService(req.user);
+    const userId = req.user.id;
 
-    // Check if profile exists
-    let profile = await prisma.musicProfile.findUnique({
-      where: { userId: req.user.id },
-    });
+    // Try to get profile from database or cache
+    const profile = await withCacheFallback(
+      async (prisma) => {
+        let profile = await prisma.musicProfile.findUnique({
+          where: { userId },
+        });
 
-    // If profile doesn't exist, trigger sync and build
-    if (!profile) {
-      console.log(`Profile not found for user ${req.user.id}, triggering sync...`);
-      await analysisService.syncUserPlayback('medium_term');
-      profile = await prisma.musicProfile.findUnique({
-        where: { userId: req.user.id },
-      });
-    }
+        // If profile doesn't exist, trigger sync and build
+        if (!profile) {
+          console.log(`Profile not found for user ${userId}, triggering sync...`);
+          await analysisService.syncUserPlayback('medium_term');
+          profile = await prisma.musicProfile.findUnique({
+            where: { userId },
+          });
+        }
+
+        return profile;
+      },
+      async (cache) => {
+        // Load from cache
+        let cachedProfile = await cache.load(userId, 'profile');
+        
+        if (!cachedProfile) {
+          // Try to build profile from cached data
+          console.log(`Cache not found for user ${userId}, fetching from Spotify...`);
+          
+          // Fetch data from Spotify
+          const spotifyService = new SpotifyService(req.user);
+          const [topTracks, topArtists, recentTracks] = await Promise.all([
+            spotifyService.getTopTracks('medium_term', 20).catch(() => []),
+            spotifyService.getTopArtists('medium_term', 20).catch(() => []),
+            spotifyService.getRecentlyPlayed(50).catch(() => []),
+          ]);
+
+          // Cache individual data
+          await Promise.all([
+            cache.save(userId, 'topTracks', topTracks),
+            cache.save(userId, 'topArtists', topArtists),
+            cache.save(userId, 'recentTracks', recentTracks),
+          ]);
+
+          // Build simple profile
+          cachedProfile = {
+            topTracks: topTracks.map(t => ({
+              trackId: t.trackId,
+              name: t.name,
+              plays: 1,
+              imageUrl: t.imageUrl,
+            })),
+            topArtists: topArtists.map(a => ({
+              artistId: a.artistId,
+              name: a.name,
+              plays: 1,
+              genres: a.genres || [],
+              imageUrl: a.imageUrl,
+            })),
+            genreDist: {},
+            avgEnergy: null,
+            avgValence: null,
+            lastUpdated: new Date().toISOString(),
+          };
+
+          await cache.save(userId, 'profile', cachedProfile);
+        }
+
+        return cachedProfile;
+      },
+      { userId, dataType: 'profile', fallbackToCache: true }
+    );
 
     if (!profile) {
       return res.status(404).json({ error: 'Failed to create music profile' });
@@ -229,16 +321,16 @@ router.get('/profile', authenticate, async (req, res) => {
 
     // Return profile data in the expected format
     res.json({
-      topTracks: profile.topTracks,
-      topArtists: profile.topArtists,
-      genreDist: profile.genreDist,
+      topTracks: profile.topTracks || [],
+      topArtists: profile.topArtists || [],
+      genreDist: profile.genreDist || {},
       avgEnergy: profile.avgEnergy,
       avgValence: profile.avgValence,
       lastUpdated: profile.lastUpdated,
     });
   } catch (error) {
     console.error('Error fetching profile:', error);
-    res.status(500).json({ error: 'Failed to fetch music profile' });
+    res.status(500).json({ error: 'Failed to fetch music profile', message: error.message });
   }
 });
 

@@ -30,5 +30,9 @@ Thumbs.db
 dist/
 build/
 
+# Cache
+cache/
+*.cache.json
+
 .DS_Store
 src/.DS_Store
