@@ -1,0 +1,59 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             String       @id @default(uuid())
+  spotifyId      String       @unique
+  displayName    String?
+  avatarUrl      String?
+  accessToken    String?
+  refreshToken   String?
+  tokenExpiresAt DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  tracks         TrackStat[]
+  artists        ArtistStat[]
+
+  @@index([spotifyId])
+}
+
+model TrackStat {
+  id        String   @id @default(uuid())
+  userId    String
+  trackId   String
+  name      String
+  artist    String
+  imageUrl  String?
+  playedAt  DateTime
+  duration  Int?     // Track duration in ms
+  popularity Int?    // Spotify popularity score
+  createdAt DateTime @default(now())
+  User      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, playedAt])
+  @@index([trackId])
+}
+
+model ArtistStat {
+  id        String   @id @default(uuid())
+  userId    String
+  artistId  String
+  name      String
+  genre     String?
+  imageUrl  String?
+  createdAt DateTime @default(now())
+  User      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([artistId])
+}
+
