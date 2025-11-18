@@ -624,7 +624,7 @@ export class AnalysisService {
   async getDashboard() {
     const [stats, topArtists, recentTracks] = await Promise.all([
       this.getListeningStats('30d'),
-      this.getTopArtists(10),
+      this.getTopArtistsFromSpotify('medium_term', 10), // Use Spotify API data instead of local stats
       this.getRecentTracks(20),
     ]);
 
@@ -648,6 +648,70 @@ export class AnalysisService {
       recentTracks,
       spotifyTopTracks,
     };
+  }
+  
+  /**
+   * Get top tracks from Spotify for specific time range
+   * @param {string} timeRange - 'short_term' (4 weeks), 'medium_term' (6 months), 'long_term' (years)
+   * @param {number} limit - Number of tracks to return
+   */
+  async getTopTracksFromSpotify(timeRange = 'medium_term', limit = 20) {
+    try {
+      // Use a promise with timeout to ensure the call doesn't hang
+      const tracks = await Promise.race([
+        this.spotifyService.getTopTracks(timeRange, limit),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error(`Timeout fetching top tracks for time range: ${timeRange}`)), 25000)
+        )
+      ]);
+      
+      // Ensure consistent format with required fields
+      return tracks.map(track => ({
+        trackId: track.trackId,
+        name: track.name,
+        artist: track.artist,
+        artistIds: track.artistIds || [],
+        imageUrl: track.imageUrl || null,
+        duration: track.duration || null,
+        popularity: track.popularity || null,
+      }));
+    } catch (error) {
+      console.error(`Error fetching top tracks from Spotify for time range ${timeRange}:`, error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Get top artists from Spotify for specific time range
+   * @param {string} timeRange - 'short_term' (4 weeks), 'medium_term' (6 months), 'long_term' (years)
+   * @param {number} limit - Number of artists to return
+   */
+  async getTopArtistsFromSpotify(timeRange = 'medium_term', limit = 20) {
+    try {
+      // Use a promise with timeout to ensure the call doesn't hang
+      const artists = await Promise.race([
+        this.spotifyService.getTopArtists(timeRange, limit),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error(`Timeout fetching top artists for time range: ${timeRange}`)), 25000)
+        )
+      ]);
+      
+      // Ensure consistent format with required fields
+      return artists.map(artist => ({
+        id: artist.id || artist.artistId,
+        artistId: artist.artistId,
+        name: artist.name,
+        genres: artist.genres || [],
+        imageUrl: artist.imageUrl || null,
+        playCount: artist.playCount || 0,
+        popularity: artist.popularity || null,
+        createdAt: artist.createdAt || new Date().toISOString(),
+        updatedAt: artist.updatedAt || new Date().toISOString(),
+      }));
+    } catch (error) {
+      console.error(`Error fetching top artists from Spotify for time range ${timeRange}:`, error);
+      throw error;
+    }
   }
 }
 
