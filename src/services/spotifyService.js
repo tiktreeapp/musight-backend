@@ -252,5 +252,54 @@ export class SpotifyService {
       .sort((a, b) => (b.tracksCount || 0) - (a.tracksCount || 0))
       .slice(0, limit);
   }
+  
+  /**
+   * Get related artists for a given artist
+   * @param {string} artistId - Spotify artist ID
+   */
+  async getRelatedArtists(artistId) {
+    const headers = await this.getAuthHeaders();
+    const axiosInstance = this.getAxiosInstance();
+    const response = await this.makeRequestWithRetry(() =>
+      axiosInstance.get(`https://api.spotify.com/v1/artists/${artistId}/related-artists`, { headers })
+    );
+    
+    // Format the response to match our standard format
+    return response.data.artists.map(artist => ({
+      artistId: artist.id,
+      name: artist.name,
+      genres: artist.genres || [],
+      imageUrl: artist.images?.[0]?.url || null,
+      popularity: artist.popularity,
+    }));
+  }
+  
+  /**
+   * Get an artist's top tracks
+   * @param {string} artistId - Spotify artist ID
+   * @param {string} market - Optional market/territory (e.g. 'US', 'GB')
+   */
+  async getArtistTopTracks(artistId, market = 'US') {
+    const headers = await this.getAuthHeaders();
+    const axiosInstance = this.getAxiosInstance();
+    const response = await this.makeRequestWithRetry(() =>
+      axiosInstance.get(`https://api.spotify.com/v1/artists/${artistId}/top-tracks`, {
+        headers,
+        params: { market },
+      })
+    );
+    
+    // Format the response to match our standard format
+    return response.data.tracks.map(track => ({
+      trackId: track.id,
+      name: track.name,
+      artist: track.artists.map(a => a.name).join(', '),
+      artistIds: track.artists.map(a => a.id),
+      imageUrl: track.album.images[0]?.url || null,
+      duration: track.duration_ms,
+      popularity: track.popularity,
+      previewUrl: track.preview_url || null,
+    }));
+  }
 }
 

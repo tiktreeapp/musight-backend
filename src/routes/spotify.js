@@ -256,6 +256,48 @@ router.get('/artist/:artistId', authenticate, async (req, res) => {
 });
 
 /**
+ * GET /api/spotify/artist/:artistId/related
+ * Get related/similar artists
+ */
+router.get('/artist/:artistId/related', authenticate, async (req, res) => {
+  // Set timeout for the entire request
+  req.setTimeout(30000, () => { // 30 seconds timeout
+    console.error('Request timeout for /api/spotify/artist/:artistId/related');
+  });
+
+  try {
+    const spotifyService = new SpotifyService(req.user);
+    const relatedArtists = await spotifyService.getRelatedArtists(req.params.artistId);
+    res.json(relatedArtists);
+  } catch (error) {
+    console.error('Error fetching related artists:', error);
+    res.status(500).json({ error: 'Failed to fetch related artists' });
+  }
+});
+
+/**
+ * GET /api/spotify/artist/:artistId/top-tracks
+ * Get artist's top tracks
+ * Query params: market (default: US)
+ */
+router.get('/artist/:artistId/top-tracks', authenticate, async (req, res) => {
+  // Set timeout for the entire request
+  req.setTimeout(30000, () => { // 30 seconds timeout
+    console.error('Request timeout for /api/spotify/artist/:artistId/top-tracks');
+  });
+
+  try {
+    const { market = 'US' } = req.query;
+    const spotifyService = new SpotifyService(req.user);
+    const topTracks = await spotifyService.getArtistTopTracks(req.params.artistId, market);
+    res.json(topTracks);
+  } catch (error) {
+    console.error('Error fetching artist top tracks:', error);
+    res.status(500).json({ error: 'Failed to fetch artist top tracks' });
+  }
+});
+
+/**
  * GET /api/spotify/playlists
  * Get user's playlists
  */
