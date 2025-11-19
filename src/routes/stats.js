@@ -467,6 +467,11 @@ router.get('/top-tracks-by-time', authenticate, async (req, res) => {
     const analysisService = new AnalysisService(req.user);
     const tracks = await analysisService.getTopTracksFromSpotify(time_range, parseInt(limit));
     
+    // Set cache control headers to help with client-side caching
+    const timestamp = new Date().toISOString();
+    res.set('X-Data-Timestamp', timestamp);
+    res.set('Cache-Control', 'no-cache'); // For now, to prevent any caching issues
+    
     res.json(tracks);
   } catch (error) {
     console.error('Error fetching top tracks by time:', error);
@@ -498,6 +503,11 @@ router.get('/top-artists-by-time', authenticate, async (req, res) => {
 
     const analysisService = new AnalysisService(req.user);
     const artists = await analysisService.getTopArtistsFromSpotify(time_range, parseInt(limit));
+    
+    // Set cache control headers to help with client-side caching
+    const timestamp = new Date().toISOString();
+    res.set('X-Data-Timestamp', timestamp);
+    res.set('Cache-Control', 'no-cache'); // For now, to prevent any caching issues
     
     res.json(artists);
   } catch (error) {
