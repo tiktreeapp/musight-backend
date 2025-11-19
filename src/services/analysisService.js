@@ -624,7 +624,10 @@ export class AnalysisService {
   async getDashboard() {
     const [stats, topArtists, recentTracks] = await Promise.all([
       this.getListeningStats('30d'),
-      this.getTopArtistsFromSpotify('medium_term', 10), // Use Spotify API data instead of local stats
+      this.getTopArtistsFromSpotify('medium_term', 10).catch(err => {
+        console.error('Error fetching top artists for dashboard:', err);
+        return []; // Return empty array if Spotify API fails
+      }),
       this.getRecentTracks(20),
     ]);
 
@@ -640,6 +643,7 @@ export class AnalysisService {
       ]);
     } catch (error) {
       console.error('Error fetching Spotify top tracks:', error);
+      spotifyTopTracks = []; // Return empty array if Spotify API fails
     }
 
     return {
@@ -697,8 +701,9 @@ export class AnalysisService {
       ]);
       
       // Ensure consistent format with required fields
+      // Spotify API returns artist with id field, but our service maps it to artistId
       return artists.map(artist => ({
-        id: artist.id || artist.artistId,
+        id: artist.artistId, // Use artistId which is the Spotify ID
         artistId: artist.artistId,
         name: artist.name,
         genres: artist.genres || [],
