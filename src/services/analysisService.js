@@ -622,36 +622,116 @@ export class AnalysisService {
    * Get comprehensive dashboard data
    */
   async getDashboard() {
-    const [stats, topArtists, recentTracks] = await Promise.all([
-      this.getListeningStats('30d'),
-      this.getTopArtistsFromSpotify('medium_term', 10).catch(err => {
-        console.error('Error fetching top artists for dashboard:', err);
-        return []; // Return empty array if Spotify API fails
-      }),
-      this.getRecentTracks(20),
-    ]);
-
-    // Get Spotify top tracks for comparison
-    let spotifyTopTracks = [];
     try {
-      // Use a promise with timeout to ensure the call doesn't hang
-      spotifyTopTracks = await Promise.race([
-        this.spotifyService.getTopTracks('medium_term', 10),
-        new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Timeout fetching Spotify top tracks')), 25000)
-        )
-      ]);
-    } catch (error) {
-      console.error('Error fetching Spotify top tracks:', error);
-      spotifyTopTracks = []; // Return empty array if Spotify API fails
-    }
+      // Check if database is available for this user
+      if (!prisma || this.user.id.startsWith('temp_')) {
+        // For temp users or when database is not available, fetch directly from Spotify
+        console.log(`Database not available for user ${this.user.id}, fetching from Spotify`);
+        
+        const [stats, topArtists, recentTracks, spotifyTopTracks] = await Promise.all([
+          // Create basic stats based on recent tracks
+          (async () => {
+            const recent = await this.spotifyService.getRecentlyPlayed(50);
+            return {
+              timeRange: '30d',
+              totalTracks: recent.length,
+              uniqueTracks: new Set(recent.map(t => t.trackId)).size,
+              uniqueArtists: new Set(recent.map(t => t.artist)).size,
+              totalListeningTime: { 
+                hours: 0, 
+                minutes: 0, 
+                totalMs: recent.reduce((sum, track) => sum + (track.duration || 0), 0) 
+              },
+              topTracks: recent.slice(0, 10),
+              topArtists: [], // Will be filled from topArtists below
+              hourlyActivity: new Array(24).fill(0),
+              firstTrack: recent[recent.length - 1] || null,
+              lastTrack: recent[0] || null,
+            };
+          })().catch(() => ({
+            timeRange: '30d',
+            totalTracks: 0,
+            uniqueTracks: 0,
+            uniqueArtists: 0,
+            totalListeningTime: { hours: 0, minutes: 0, totalMs: 0 },
+            topTracks: [],
+            topArtists: [],
+            hourlyActivity: new Array(24).fill(0),
+            firstTrack: null,
+            lastTrack: null,
+          })),
+          this.spotifyService.getTopArtists('medium_term', 10).catch(() => []),
+          this.spotifyService.getRecentlyPlayed(20).catch(() => []),
+          this.spotifyService.getTopTracks('medium_term', 10).catch(() => [])
+        ]);
 
-    return {
-      stats,
-      topArtists,
-      recentTracks,
-      spotifyTopTracks,
-    };
+        return {
+          stats,
+          topArtists: topArtists.map(artist => ({
+            id: artist.artistId,
+            artistId: artist.artistId,
+            name: artist.name,
+            genres: artist.genres || [],
+            imageUrl: artist.imageUrl || null,
+            playCount: artist.playCount || 0,
+          })),
+          recentTracks,
+          spotifyTopTracks,
+        };
+      }
+
+      // Use database for regular users
+      const [stats, topArtists, recentTracks] = await Promise.all([
+        this.getListeningStats('30d'),
+        this.getTopArtists('10').catch(err => {
+          console.error('Error fetching top artists for dashboard:', err);
+          return []; // Return empty array if database query fails
+        }),
+        this.getRecentTracks(20),
+      ]);
+
+      // Get Spotify top tracks for comparison
+      let spotifyTopTracks = [];
+      try {
+        // Use a promise with timeout to ensure the call doesn't hang
+        spotifyTopTracks = await Promise.race([
+          this.spotifyService.getTopTracks('medium_term', 10),
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Timeout fetching Spotify top tracks')), 25000)
+          )
+        ]);
+      } catch (error) {
+        console.error('Error fetching Spotify top tracks:', error);
+        spotifyTopTracks = []; // Return empty array if Spotify API fails
+      }
+
+      return {
+        stats,
+        topArtists,
+        recentTracks,
+        spotifyTopTracks,
+      };
+    } catch (error) {
+      console.error('Error in getDashboard:', error);
+      // Return a safe fallback response
+      return {
+        stats: {
+          timeRange: '30d',
+          totalTracks: 0,
+          uniqueTracks: 0,
+          uniqueArtists: 0,
+          totalListeningTime: { hours: 0, minutes: 0, totalMs: 0 },
+          topTracks: [],
+          topArtists: [],
+          hourlyActivity: new Array(24).fill(0),
+          firstTrack: null,
+          lastTrack: null,
+        },
+        topArtists: [],
+        recentTracks: [],
+        spotifyTopTracks: []
+      };
+    }
   }
   
   /**

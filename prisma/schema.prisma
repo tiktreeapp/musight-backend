@@ -1,6 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -20,47 +17,46 @@ model User {
   tokenExpiresAt DateTime?
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
-  tracks         TrackStat[]
   artists        ArtistStat[]
   musicProfile   MusicProfile?
+  tracks         TrackStat[]
 
   @@index([spotifyId])
 }
 
 model TrackStat {
-  id            String   @id @default(uuid())
-  userId        String
-  trackId       String
-  name          String
-  artist        String
-  imageUrl      String?
-  playedAt      DateTime
-  duration      Int?     // Track duration in ms
-  popularity    Int?     // Spotify popularity score
-  // Audio features (cached from Spotify API)
-  danceability  Float?
-  energy        Float?
-  valence       Float?
-  tempo         Float?
-  createdAt     DateTime @default(now())
-  User          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id           String   @id @default(uuid())
+  userId       String
+  trackId      String
+  name         String
+  artist       String
+  imageUrl     String?
+  playedAt     DateTime
+  duration     Int?
+  popularity   Int?
+  danceability Float?
+  energy       Float?
+  valence      Float?
+  tempo        Float?
+  createdAt    DateTime @default(now())
+  User         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@unique([userId, trackId, playedAt])
   @@index([userId, playedAt])
   @@index([userId, trackId])
-  @@unique([userId, trackId, playedAt]) // Prevent duplicates
 }
 
 model ArtistStat {
-  id        String    @id @default(uuid())
+  id        String   @id @default(uuid())
   userId    String
   artistId  String
   name      String
-  genres    String[]  // PostgreSQL text[] - array of genre strings
+  genres    String[]
   imageUrl  String?
-  playCount Int       @default(0)
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  User      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  playCount Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  User      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, artistId])
   @@index([userId])
@@ -70,9 +66,9 @@ model ArtistStat {
 model MusicProfile {
   id          String   @id @default(uuid())
   userId      String   @unique
-  topTracks   Json     // [{trackId, name, plays, imageUrl}]
-  topArtists  Json     // [{artistId, name, plays, genres, imageUrl}]
-  genreDist   Json     // { "pop": 0.4, "rock": 0.3, ... }
+  topTracks   Json
+  topArtists  Json
+  genreDist   Json
   avgEnergy   Float?
   avgValence  Float?
   lastUpdated DateTime @default(now()) @updatedAt
@@ -80,4 +76,3 @@ model MusicProfile {
 
   @@index([userId])
 }
-
