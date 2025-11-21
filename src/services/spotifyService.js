@@ -341,13 +341,13 @@ export class SpotifyService {
       axiosInstance.get(`https://api.spotify.com/v1/artists/${artistId}/related-artists`, { headers })
     );
     
-    // Format the response to match our standard format
+    // Format the response to match our standard format with error handling
     return response.data.artists.map(artist => ({
-      artistId: artist.id,
-      name: artist.name,
+      artistId: artist.id || 'unknown_id',
+      name: artist.name || 'Unknown Artist',
       genres: artist.genres || [],
       imageUrl: artist.images?.[0]?.url || null,
-      popularity: artist.popularity,
+      popularity: artist.popularity || 0,
     }));
   }
   
@@ -409,17 +409,27 @@ export class SpotifyService {
       })
     );
     
-    // Format the response to match our standard format
-    return response.data.items.map(album => ({
-      albumId: album.id,
-      name: album.name,
-      type: album.album_type,
-      imageUrl: album.images[0]?.url || null,
-      releaseDate: album.release_date,
-      releaseDatePrecision: album.release_date_precision,
-      totalTracks: album.total_tracks,
-      artists: album.artists.map(a => ({ id: a.id, name: a.name })),
-    }));
+    // Format the response to match our standard format with error handling
+    return response.data.items.map(album => {
+      // Ensure required fields are always present with fallback values
+      const artists = album.artists && Array.isArray(album.artists)
+        ? album.artists.map(a => ({ 
+            id: a.id || 'unknown_id', 
+            name: a.name || 'Unknown Artist' 
+          }))
+        : [];
+      
+      return {
+        albumId: album.id || 'unknown_id',
+        name: album.name || 'Unknown Album',
+        type: album.album_type || 'album',
+        imageUrl: album.images?.[0]?.url || null,
+        releaseDate: album.release_date || null,
+        releaseDatePrecision: album.release_date_precision || null,
+        totalTracks: album.total_tracks || 0,
+        artists: artists,
+      };
+    });
   }
   
   /**

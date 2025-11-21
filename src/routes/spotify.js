@@ -421,7 +421,7 @@ router.get('/artist/:artistId/related', authenticate, async (req, res) => {
     res.json(relatedArtists);
   } catch (error) {
     console.error('Error fetching related artists:', error);
-    res.status(500).json({ error: 'Failed to fetch related artists' });
+    res.status(500).json({ error: 'Failed to fetch related artists', message: error.message });
   }
 });
 
@@ -443,7 +443,7 @@ router.get('/artist/:artistId/top-tracks', authenticate, async (req, res) => {
     res.json(topTracks);
   } catch (error) {
     console.error('Error fetching artist top tracks:', error);
-    res.status(500).json({ error: 'Failed to fetch artist top tracks' });
+    res.status(500).json({ error: 'Failed to fetch artist top tracks', message: error.message });
   }
 });
 
@@ -465,7 +465,7 @@ router.get('/artist/:artistId/albums', authenticate, async (req, res) => {
     res.json(albums);
   } catch (error) {
     console.error('Error fetching artist albums:', error);
-    res.status(500).json({ error: 'Failed to fetch artist albums' });
+    res.status(500).json({ error: 'Failed to fetch artist albums', message: error.message });
   }
 });
 
