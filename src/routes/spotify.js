@@ -418,7 +418,13 @@ router.get('/artist/:artistId/related', authenticate, async (req, res) => {
   try {
     const spotifyService = new SpotifyService(req.user);
     const relatedArtists = await spotifyService.getRelatedArtists(req.params.artistId);
-    res.json(relatedArtists);
+    // Return in a format similar to Most Popular module
+    res.json({
+      items: relatedArtists,
+      total: relatedArtists.length,
+      limit: relatedArtists.length,
+      offset: 0
+    });
   } catch (error) {
     console.error('Error fetching related artists:', error);
     res.status(500).json({ error: 'Failed to fetch related artists', message: error.message });
@@ -440,7 +446,13 @@ router.get('/artist/:artistId/top-tracks', authenticate, async (req, res) => {
     const { market = 'US' } = req.query;
     const spotifyService = new SpotifyService(req.user);
     const topTracks = await spotifyService.getArtistTopTracks(req.params.artistId, market);
-    res.json(topTracks);
+    // Return in a format similar to Most Popular module
+    res.json({
+      items: topTracks,
+      total: topTracks.length,
+      limit: topTracks.length,
+      offset: 0
+    });
   } catch (error) {
     console.error('Error fetching artist top tracks:', error);
     res.status(500).json({ error: 'Failed to fetch artist top tracks', message: error.message });
@@ -462,7 +474,13 @@ router.get('/artist/:artistId/albums', authenticate, async (req, res) => {
     const { include_groups = 'album,single', market = 'US' } = req.query;
     const spotifyService = new SpotifyService(req.user);
     const albums = await spotifyService.getArtistAlbums(req.params.artistId, include_groups, market);
-    res.json(albums);
+    // Return in a format similar to Most Popular module
+    res.json({
+      items: albums,
+      total: albums.length,
+      limit: albums.length,
+      offset: 0
+    });
   } catch (error) {
     console.error('Error fetching artist albums:', error);
     res.status(500).json({ error: 'Failed to fetch artist albums', message: error.message });
