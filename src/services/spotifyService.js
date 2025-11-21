@@ -257,8 +257,7 @@ export class SpotifyService {
       artists: track.artists.map(a => ({ id: a.id, name: a.name })),
     }));
   }
-}
-
+  
   /**
    * Get artist details
    * @param {string} artistId
