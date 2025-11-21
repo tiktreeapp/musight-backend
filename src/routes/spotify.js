@@ -413,10 +413,6 @@ router.get('/track/:trackId/details', authenticate, async (req, res) => {
     console.error('Error fetching comprehensive track details:', error);
     res.status(500).json({ error: 'Failed to fetch comprehensive track details', message: error.message });
   }
-  } catch (error) {
-    console.error('Error fetching comprehensive track details:', error);
-    res.status(500).json({ error: 'Failed to fetch comprehensive track details', message: error.message });
-  }
 });
 
 /**
