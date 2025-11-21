@@ -110,17 +110,28 @@ export class SpotifyService {
       })
     );
 
-    return response.data.items.map(item => ({
-      trackId: item.track.id,
-      name: item.track.name,
-      artist: item.track.artists.map(a => a.name).join(', '),
-      artistIds: item.track.artists.map(a => a.id),
-      imageUrl: item.track.album.images[0]?.url || null,
-      previewUrl: item.track.preview_url || null,
-      playedAt: new Date(item.played_at),
-      duration: item.track.duration_ms,
-      popularity: item.track.popularity,
-    }));
+    return response.data.items.map(item => {
+      // Ensure required fields are always present with fallback values
+      const track = item.track || {};
+      const artistName = track.artists && Array.isArray(track.artists) 
+        ? track.artists.map(a => a.name || 'Unknown Artist').join(', ') 
+        : 'Unknown Artist';
+      const artistIds = track.artists && Array.isArray(track.artists)
+        ? track.artists.map(a => a.id || 'unknown_id')
+        : [];
+      
+      return {
+        trackId: track.id || 'unknown_id',
+        name: track.name || 'Unknown Track',
+        artist: artistName,
+        artistIds: artistIds,
+        imageUrl: track.album?.images?.[0]?.url || null,
+        previewUrl: track.preview_url || null,
+        playedAt: new Date(item.played_at),
+        duration: track.duration_ms || 0,
+        popularity: track.popularity || 0,
+      };
+    });
   }
 
   /**
@@ -138,16 +149,26 @@ export class SpotifyService {
       })
     );
 
-    return response.data.items.map(track => ({
-      trackId: track.id,
-      name: track.name,
-      artist: track.artists.map(a => a.name).join(', '),
-      artistIds: track.artists.map(a => a.id),
-      imageUrl: track.album.images[0]?.url || null,
-      previewUrl: track.preview_url || null,
-      duration: track.duration_ms,
-      popularity: track.popularity,
-    }));
+    return response.data.items.map(track => {
+      // Ensure required fields are always present with fallback values
+      const artistName = track.artists && Array.isArray(track.artists) 
+        ? track.artists.map(a => a.name || 'Unknown Artist').join(', ') 
+        : 'Unknown Artist';
+      const artistIds = track.artists && Array.isArray(track.artists)
+        ? track.artists.map(a => a.id || 'unknown_id')
+        : [];
+      
+      return {
+        trackId: track.id || 'unknown_id',
+        name: track.name || 'Unknown Track',
+        artist: artistName,
+        artistIds: artistIds,
+        imageUrl: track.album?.images?.[0]?.url || null,
+        previewUrl: track.preview_url || null,
+        duration: track.duration_ms || 0,
+        popularity: track.popularity || 0,
+      };
+    });
   }
 
   /**
@@ -166,11 +187,11 @@ export class SpotifyService {
     );
 
     return response.data.items.map(artist => ({
-      artistId: artist.id,
-      name: artist.name,
-      genres: artist.genres,
-      imageUrl: artist.images[0]?.url || null,
-      popularity: artist.popularity,
+      artistId: artist.id || 'unknown_id',
+      name: artist.name || 'Unknown Artist',
+      genres: artist.genres || [],
+      imageUrl: artist.images?.[0]?.url || null,
+      popularity: artist.popularity || 0,
     }));
   }
 
@@ -346,16 +367,26 @@ export class SpotifyService {
     );
     
     // Format the response to match our standard format
-    return response.data.tracks.map(track => ({
-      trackId: track.id,
-      name: track.name,
-      artist: track.artists.map(a => a.name).join(', '),
-      artistIds: track.artists.map(a => a.id),
-      imageUrl: track.album.images[0]?.url || null,
-      duration: track.duration_ms,
-      popularity: track.popularity,
-      previewUrl: track.preview_url || null,
-    }));
+    return response.data.tracks.map(track => {
+      // Ensure required fields are always present with fallback values
+      const artistName = track.artists && Array.isArray(track.artists) 
+        ? track.artists.map(a => a.name || 'Unknown Artist').join(', ') 
+        : 'Unknown Artist';
+      const artistIds = track.artists && Array.isArray(track.artists)
+        ? track.artists.map(a => a.id || 'unknown_id')
+        : [];
+      
+      return {
+        trackId: track.id || 'unknown_id',
+        name: track.name || 'Unknown Track',
+        artist: artistName,
+        artistIds: artistIds,
+        imageUrl: track.album?.images?.[0]?.url || null,
+        duration: track.duration_ms || 0,
+        popularity: track.popularity || 0,
+        previewUrl: track.preview_url || null,
+      };
+    });
   }
   
   /**
