@@ -396,9 +396,23 @@ router.get('/track/:trackId/details', authenticate, async (req, res) => {
         beats_count: audioAnalysis.beats ? audioAnalysis.beats.length : 0,
         sections_count: audioAnalysis.sections ? audioAnalysis.sections.length : 0,
       } : null,
-      albumTracks: albumTracks,
-      artistTopTracks: artistTopTracks,
+      albumTracks: {
+        items: albumTracks,
+        total: albumTracks.length,
+        limit: albumTracks.length,
+        offset: 0
+      },
+      artistTopTracks: {
+        items: artistTopTracks,
+        total: artistTopTracks.length,
+        limit: artistTopTracks.length,
+        offset: 0
+      },
     });
+  } catch (error) {
+    console.error('Error fetching comprehensive track details:', error);
+    res.status(500).json({ error: 'Failed to fetch comprehensive track details', message: error.message });
+  }
   } catch (error) {
     console.error('Error fetching comprehensive track details:', error);
     res.status(500).json({ error: 'Failed to fetch comprehensive track details', message: error.message });
