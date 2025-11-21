@@ -234,18 +234,27 @@ export class SpotifyService {
     const axiosInstance = this.getAxiosInstance();
     
     try {
+      console.log(`[DEBUG] Attempting to fetch audio features for ${trackId}`);
       const response = await this.makeRequestWithRetry(() =>
         axiosInstance.get(`https://api.spotify.com/v1/audio-features/${trackId}`, { headers })
       );
       
-      console.log(`[DEBUG] Audio features response for ${trackId}:`, {
+      console.log(`[DEBUG] Raw audio features response for ${trackId}:`, {
+        status: response.status,
+        statusText: response.statusText,
+        hasData: !!response.data,
         id: response.data.id,
-        success: !!response.data.id
+        dataKeys: response.data ? Object.keys(response.data) : []
       });
       
       return response.data;
     } catch (error) {
       console.error(`[ERROR] Error fetching audio features for track ${trackId}:`, error.message);
+      console.error(`[ERROR] Error details:`, {
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data
+      });
       throw error;
     }
   }
@@ -351,36 +360,51 @@ export class SpotifyService {
     const axiosInstance = this.getAxiosInstance();
     
     try {
+      console.log(`[DEBUG] Attempting to fetch related artists for ${artistId}`);
       const response = await this.makeRequestWithRetry(() =>
         axiosInstance.get(`https://api.spotify.com/v1/artists/${artistId}/related-artists`, { headers })
       );
       
-      // Log the raw response for debugging
-      console.log(`[DEBUG] Related artists response for ${artistId}:`, {
-        total: response.data.artists?.length,
-        hasArtists: !!response.data.artists
+      console.log(`[DEBUG] Raw related artists response for ${artistId}:`, {
+        status: response.status,
+        statusText: response.statusText,
+        hasData: !!response.data,
+        hasArtists: !!response.data.artists,
+        artistsCount: response.data.artists ? response.data.artists.length : 0,
+        dataKeys: response.data ? Object.keys(response.data) : []
       });
       
-      if (!response.data.artists || response.data.artists.length === 0) {
-        console.warn(`[WARN] No related artists found for artist ${artistId}`);
+      if (!response.data || !response.data.artists || response.data.artists.length === 0) {
+        console.warn(`[WARN] No related artists found for artist ${artistId} in response`);
         return [];
       }
       
       // Format the response to match our standard format with error handling
-      return response.data.artists.map(artist => ({
+      const formattedArtists = response.data.artists.map(artist => ({
         artistId: artist.id || 'unknown_id',
         name: artist.name || 'Unknown Artist',
         genres: artist.genres || [],
         imageUrl: artist.images?.[0]?.url || null,
         popularity: artist.popularity || 0,
       }));
+      
+      console.log(`[DEBUG] Formatted ${formattedArtists.length} related artists for ${artistId}`);
+      
+      return formattedArtists;
     } catch (error) {
       console.error(`[ERROR] Error fetching related artists for artist ${artistId}:`, error.message);
-      // 404可能表示艺术家没有相关艺术家，这种情况下返回空数组而不是抛出错误
+      console.error(`[ERROR] Error details:`, {
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data
+      });
+      
+      // 对于404错误，这可能意味着艺术家没有相关艺术家，返回空数组
       if (error.response?.status === 404) {
         console.warn(`[WARN] No related artists found for artist ${artistId} (404 response)`);
         return [];
       }
+      // 对于其他错误，抛出异常让上层处理
       throw error;
     }
   }
