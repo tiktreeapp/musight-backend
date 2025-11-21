@@ -323,39 +323,67 @@ router.get('/track/:trackId/details', authenticate, async (req, res) => {
     const spotifyService = new SpotifyService(req.user);
     const trackId = req.params.trackId;
     
-    // Fetch all data in parallel
-    const [track, audioFeatures, audioAnalysis] = await Promise.all([
-      spotifyService.getTrack(trackId),
-      spotifyService.getAudioFeaturesForTrack(trackId),
-      spotifyService.getAudioAnalysis(trackId)
-    ]);
+    // Fetch data with individual error handling to prevent one failure from breaking the whole request
+    let track, audioFeatures, audioAnalysis, albumTracks, artistTopTracks;
     
-    // Extract album ID and artist ID from the track
-    const albumId = track.album.id;
-    const artistId = track.artists[0]?.id; // Use first artist
-    
-    // Fetch related data
-    const relatedPromises = [];
-    
-    if (albumId) {
-      relatedPromises.push(spotifyService.getAlbumTracks(albumId));
-    } else {
-      relatedPromises.push(Promise.resolve([]));
+    try {
+      track = await spotifyService.getTrack(trackId);
+    } catch (trackError) {
+      console.error('Error fetching track:', trackError);
+      track = null;
     }
     
-    if (artistId) {
-      relatedPromises.push(spotifyService.getArtistTopTracks(artistId));
-    } else {
-      relatedPromises.push(Promise.resolve([]));
+    try {
+      audioFeatures = await spotifyService.getAudioFeaturesForTrack(trackId);
+    } catch (audioFeaturesError) {
+      console.error('Error fetching audio features:', audioFeaturesError);
+      audioFeatures = null;
     }
     
-    const [albumTracks, artistTopTracks] = await Promise.all(relatedPromises);
+    try {
+      audioAnalysis = await spotifyService.getAudioAnalysis(trackId);
+    } catch (audioAnalysisError) {
+      console.error('Error fetching audio analysis:', audioAnalysisError);
+      audioAnalysis = null;
+    }
     
-    // Return comprehensive track details
+    // Extract album ID and artist ID from the track if available
+    let albumId, artistId;
+    if (track && track.album) {
+      albumId = track.album.id;
+    }
+    if (track && track.artists && track.artists[0]) {
+      artistId = track.artists[0].id;
+    }
+    
+    // Fetch related data if IDs are available
+    try {
+      if (albumId) {
+        albumTracks = await spotifyService.getAlbumTracks(albumId);
+      } else {
+        albumTracks = [];
+      }
+    } catch (albumError) {
+      console.error('Error fetching album tracks:', albumError);
+      albumTracks = [];
+    }
+    
+    try {
+      if (artistId) {
+        artistTopTracks = await spotifyService.getArtistTopTracks(artistId);
+      } else {
+        artistTopTracks = [];
+      }
+    } catch (artistError) {
+      console.error('Error fetching artist top tracks:', artistError);
+      artistTopTracks = [];
+    }
+    
+    // Return comprehensive track details (some may be null if individual requests failed)
     res.json({
       track: track,
       audioFeatures: audioFeatures,
-      audioAnalysis: {
+      audioAnalysis: audioAnalysis ? {
         // Only return key sections of audio analysis to avoid huge payloads
         meta: audioAnalysis.meta,
         track: audioAnalysis.track,
@@ -367,7 +395,7 @@ router.get('/track/:trackId/details', authenticate, async (req, res) => {
         tatums: audioAnalysis.tatums || [],
         beats_count: audioAnalysis.beats ? audioAnalysis.beats.length : 0,
         sections_count: audioAnalysis.sections ? audioAnalysis.sections.length : 0,
-      },
+      } : null,
       albumTracks: albumTracks,
       artistTopTracks: artistTopTracks,
     });
