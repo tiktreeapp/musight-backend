@@ -341,6 +341,16 @@ export class SpotifyService {
       axiosInstance.get(`https://api.spotify.com/v1/artists/${artistId}/related-artists`, { headers })
     );
     
+    // Log the raw response for debugging
+    console.log(`[DEBUG] Related artists response for ${artistId}:`, {
+      total: response.data.artists?.length
+    });
+    
+    if (!response.data.artists || response.data.artists.length === 0) {
+      console.warn(`[WARN] No related artists found for artist ${artistId}`);
+      return [];
+    }
+    
     // Format the response to match our standard format with error handling
     return response.data.artists.map(artist => ({
       artistId: artist.id || 'unknown_id',
@@ -359,34 +369,50 @@ export class SpotifyService {
   async getArtistTopTracks(artistId, market = 'US') {
     const headers = await this.getAuthHeaders();
     const axiosInstance = this.getAxiosInstance();
-    const response = await this.makeRequestWithRetry(() =>
-      axiosInstance.get(`https://api.spotify.com/v1/artists/${artistId}/top-tracks`, {
-        headers,
-        params: { market },
-      })
-    );
     
-    // Format the response to match our standard format
-    return response.data.tracks.map(track => {
-      // Ensure required fields are always present with fallback values
-      const artistName = track.artists && Array.isArray(track.artists) 
-        ? track.artists.map(a => a.name || 'Unknown Artist').join(', ') 
-        : 'Unknown Artist';
-      const artistIds = track.artists && Array.isArray(track.artists)
-        ? track.artists.map(a => a.id || 'unknown_id')
-        : [];
+    try {
+      const response = await this.makeRequestWithRetry(() =>
+        axiosInstance.get(`https://api.spotify.com/v1/artists/${artistId}/top-tracks`, {
+          headers,
+          params: { market },
+        })
+      );
       
-      return {
-        trackId: track.id || 'unknown_id',
-        name: track.name || 'Unknown Track',
-        artist: artistName,
-        artistIds: artistIds,
-        imageUrl: track.album?.images?.[0]?.url || null,
-        duration: track.duration_ms || 0,
-        popularity: track.popularity || 0,
-        previewUrl: track.preview_url || null,
-      };
-    });
+      // Log the raw response for debugging
+      console.log(`[DEBUG] Artist top tracks response for ${artistId}:`, {
+        total: response.data.tracks?.length
+      });
+      
+      if (!response.data.tracks || response.data.tracks.length === 0) {
+        console.warn(`[WARN] No top tracks found for artist ${artistId}`);
+        return [];
+      }
+      
+      // Format the response to match our standard format
+      return response.data.tracks.map(track => {
+        // Ensure required fields are always present with fallback values
+        const artistName = track.artists && Array.isArray(track.artists) 
+          ? track.artists.map(a => a.name || 'Unknown Artist').join(', ') 
+          : 'Unknown Artist';
+        const artistIds = track.artists && Array.isArray(track.artists)
+          ? track.artists.map(a => a.id || 'unknown_id')
+          : [];
+        
+        return {
+          trackId: track.id || 'unknown_id',
+          name: track.name || 'Unknown Track',
+          artist: artistName,
+          artistIds: artistIds,
+          imageUrl: track.album?.images?.[0]?.url || null,
+          duration: track.duration_ms || 0,
+          popularity: track.popularity || 0,
+          previewUrl: track.preview_url || null,
+        };
+      });
+    } catch (error) {
+      console.error(`[ERROR] Error fetching top tracks for artist ${artistId}:`, error.message);
+      throw error;
+    }
   }
   
   /**
@@ -398,38 +424,56 @@ export class SpotifyService {
   async getArtistAlbums(artistId, includeGroups = 'album,single', market = 'US') {
     const headers = await this.getAuthHeaders();
     const axiosInstance = this.getAxiosInstance();
-    const response = await this.makeRequestWithRetry(() =>
-      axiosInstance.get(`https://api.spotify.com/v1/artists/${artistId}/albums`, {
-        headers,
-        params: { 
-          include_groups: includeGroups,
-          market: market,
-          limit: 50 // Max limit for this endpoint
-        },
-      })
-    );
     
-    // Format the response to match our standard format with error handling
-    return response.data.items.map(album => {
-      // Ensure required fields are always present with fallback values
-      const artists = album.artists && Array.isArray(album.artists)
-        ? album.artists.map(a => ({ 
-            id: a.id || 'unknown_id', 
-            name: a.name || 'Unknown Artist' 
-          }))
-        : [];
+    try {
+      const response = await this.makeRequestWithRetry(() =>
+        axiosInstance.get(`https://api.spotify.com/v1/artists/${artistId}/albums`, {
+          headers,
+          params: { 
+            include_groups: includeGroups,
+            market: market,
+            limit: 50 // Max limit for this endpoint
+          },
+        })
+      );
       
-      return {
-        albumId: album.id || 'unknown_id',
-        name: album.name || 'Unknown Album',
-        type: album.album_type || 'album',
-        imageUrl: album.images?.[0]?.url || null,
-        releaseDate: album.release_date || null,
-        releaseDatePrecision: album.release_date_precision || null,
-        totalTracks: album.total_tracks || 0,
-        artists: artists,
-      };
-    });
+      // Log the raw response for debugging
+      console.log(`[DEBUG] Artist albums response for ${artistId}:`, {
+        total: response.data.items?.length,
+        href: response.data.href,
+        next: response.data.next
+      });
+      
+      if (!response.data.items || response.data.items.length === 0) {
+        console.warn(`[WARN] No albums found for artist ${artistId}`);
+        return [];
+      }
+      
+      // Format the response to match our standard format with error handling
+      return response.data.items.map(album => {
+        // Ensure required fields are always present with fallback values
+        const artists = album.artists && Array.isArray(album.artists)
+          ? album.artists.map(a => ({ 
+              id: a.id || 'unknown_id', 
+              name: a.name || 'Unknown Artist' 
+            }))
+          : [];
+        
+        return {
+          albumId: album.id || 'unknown_id',
+          name: album.name || 'Unknown Album',
+          type: album.album_type || 'album',
+          imageUrl: album.images?.[0]?.url || null,
+          releaseDate: album.release_date || null,
+          releaseDatePrecision: album.release_date_precision || null,
+          totalTracks: album.total_tracks || 0,
+          artists: artists,
+        };
+      });
+    } catch (error) {
+      console.error(`[ERROR] Error fetching albums for artist ${artistId}:`, error.message);
+      throw error;
+    }
   }
   
   /**
