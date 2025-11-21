@@ -232,10 +232,22 @@ export class SpotifyService {
   async getAudioFeaturesForTrack(trackId) {
     const headers = await this.getAuthHeaders();
     const axiosInstance = this.getAxiosInstance();
-    const response = await this.makeRequestWithRetry(() =>
-      axiosInstance.get(`https://api.spotify.com/v1/audio-features/${trackId}`, { headers })
-    );
-    return response.data;
+    
+    try {
+      const response = await this.makeRequestWithRetry(() =>
+        axiosInstance.get(`https://api.spotify.com/v1/audio-features/${trackId}`, { headers })
+      );
+      
+      console.log(`[DEBUG] Audio features response for ${trackId}:`, {
+        id: response.data.id,
+        success: !!response.data.id
+      });
+      
+      return response.data;
+    } catch (error) {
+      console.error(`[ERROR] Error fetching audio features for track ${trackId}:`, error.message);
+      throw error;
+    }
   }
 
   /**
@@ -337,28 +349,40 @@ export class SpotifyService {
   async getRelatedArtists(artistId) {
     const headers = await this.getAuthHeaders();
     const axiosInstance = this.getAxiosInstance();
-    const response = await this.makeRequestWithRetry(() =>
-      axiosInstance.get(`https://api.spotify.com/v1/artists/${artistId}/related-artists`, { headers })
-    );
     
-    // Log the raw response for debugging
-    console.log(`[DEBUG] Related artists response for ${artistId}:`, {
-      total: response.data.artists?.length
-    });
-    
-    if (!response.data.artists || response.data.artists.length === 0) {
-      console.warn(`[WARN] No related artists found for artist ${artistId}`);
-      return [];
+    try {
+      const response = await this.makeRequestWithRetry(() =>
+        axiosInstance.get(`https://api.spotify.com/v1/artists/${artistId}/related-artists`, { headers })
+      );
+      
+      // Log the raw response for debugging
+      console.log(`[DEBUG] Related artists response for ${artistId}:`, {
+        total: response.data.artists?.length,
+        hasArtists: !!response.data.artists
+      });
+      
+      if (!response.data.artists || response.data.artists.length === 0) {
+        console.warn(`[WARN] No related artists found for artist ${artistId}`);
+        return [];
+      }
+      
+      // Format the response to match our standard format with error handling
+      return response.data.artists.map(artist => ({
+        artistId: artist.id || 'unknown_id',
+        name: artist.name || 'Unknown Artist',
+        genres: artist.genres || [],
+        imageUrl: artist.images?.[0]?.url || null,
+        popularity: artist.popularity || 0,
+      }));
+    } catch (error) {
+      console.error(`[ERROR] Error fetching related artists for artist ${artistId}:`, error.message);
+      // 404可能表示艺术家没有相关艺术家，这种情况下返回空数组而不是抛出错误
+      if (error.response?.status === 404) {
+        console.warn(`[WARN] No related artists found for artist ${artistId} (404 response)`);
+        return [];
+      }
+      throw error;
     }
-    
-    // Format the response to match our standard format with error handling
-    return response.data.artists.map(artist => ({
-      artistId: artist.id || 'unknown_id',
-      name: artist.name || 'Unknown Artist',
-      genres: artist.genres || [],
-      imageUrl: artist.images?.[0]?.url || null,
-      popularity: artist.popularity || 0,
-    }));
   }
   
   /**
