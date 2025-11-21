@@ -116,6 +116,7 @@ export class SpotifyService {
       artist: item.track.artists.map(a => a.name).join(', '),
       artistIds: item.track.artists.map(a => a.id),
       imageUrl: item.track.album.images[0]?.url || null,
+      previewUrl: item.track.preview_url || null,
       playedAt: new Date(item.played_at),
       duration: item.track.duration_ms,
       popularity: item.track.popularity,
@@ -143,6 +144,7 @@ export class SpotifyService {
       artist: track.artists.map(a => a.name).join(', '),
       artistIds: track.artists.map(a => a.id),
       imageUrl: track.album.images[0]?.url || null,
+      previewUrl: track.preview_url || null,
       duration: track.duration_ms,
       popularity: track.popularity,
     }));
@@ -201,6 +203,61 @@ export class SpotifyService {
     );
     return response.data;
   }
+
+  /**
+   * Get audio features for a single track
+   * @param {string} trackId
+   */
+  async getAudioFeaturesForTrack(trackId) {
+    const headers = await this.getAuthHeaders();
+    const axiosInstance = this.getAxiosInstance();
+    const response = await this.makeRequestWithRetry(() =>
+      axiosInstance.get(`https://api.spotify.com/v1/audio-features/${trackId}`, { headers })
+    );
+    return response.data;
+  }
+
+  /**
+   * Get audio analysis for a track
+   * @param {string} trackId
+   */
+  async getAudioAnalysis(trackId) {
+    const headers = await this.getAuthHeaders();
+    const axiosInstance = this.getAxiosInstance();
+    const response = await this.makeRequestWithRetry(() =>
+      axiosInstance.get(`https://api.spotify.com/v1/audio-analysis/${trackId}`, { headers })
+    );
+    return response.data;
+  }
+
+  /**
+   * Get tracks from an album
+   * @param {string} albumId
+   * @param {number} limit - Number of tracks to return (max 50)
+   * @param {number} offset - The index of the first track to return
+   */
+  async getAlbumTracks(albumId, limit = 50, offset = 0) {
+    const headers = await this.getAuthHeaders();
+    const axiosInstance = this.getAxiosInstance();
+    const response = await this.makeRequestWithRetry(() =>
+      axiosInstance.get(`https://api.spotify.com/v1/albums/${albumId}/tracks`, {
+        headers,
+        params: { limit, offset }
+      })
+    );
+
+    return response.data.items.map(track => ({
+      trackId: track.id,
+      name: track.name,
+      discNumber: track.disc_number,
+      trackNumber: track.track_number,
+      duration: track.duration_ms,
+      explicit: track.explicit,
+      previewUrl: track.preview_url || null,
+      artists: track.artists.map(a => ({ id: a.id, name: a.name })),
+    }));
+  }
+}
 
   /**
    * Get artist details
@@ -300,6 +357,101 @@ export class SpotifyService {
       popularity: track.popularity,
       previewUrl: track.preview_url || null,
     }));
+  }
+  
+  /**
+   * Get an artist's albums
+   * @param {string} artistId - Spotify artist ID
+   * @param {string} includeGroups - Comma-separated album types to include (album, single, appears_on, compilation)
+   * @param {string} market - Optional market/territory (e.g. 'US', 'GB')
+   */
+  async getArtistAlbums(artistId, includeGroups = 'album,single', market = 'US') {
+    const headers = await this.getAuthHeaders();
+    const axiosInstance = this.getAxiosInstance();
+    const response = await this.makeRequestWithRetry(() =>
+      axiosInstance.get(`https://api.spotify.com/v1/artists/${artistId}/albums`, {
+        headers,
+        params: { 
+          include_groups: includeGroups,
+          market: market,
+          limit: 50 // Max limit for this endpoint
+        },
+      })
+    );
+    
+    // Format the response to match our standard format
+    return response.data.items.map(album => ({
+      albumId: album.id,
+      name: album.name,
+      type: album.album_type,
+      imageUrl: album.images[0]?.url || null,
+      releaseDate: album.release_date,
+      releaseDatePrecision: album.release_date_precision,
+      totalTracks: album.total_tracks,
+      artists: album.artists.map(a => ({ id: a.id, name: a.name })),
+    }));
+  }
+  
+  /**
+   * Follow an artist
+   * @param {string} artistId - Spotify artist ID
+   */
+  async followArtist(artistId) {
+    const headers = await this.getAuthHeaders();
+    const axiosInstance = this.getAxiosInstance();
+    
+    // Note: For following artists, we need to send the artist IDs in the request body
+    await this.makeRequestWithRetry(() =>
+      axiosInstance.put(`https://api.spotify.com/v1/me/following`, 
+        { ids: [artistId] },
+        { 
+          headers,
+          params: { type: 'artist' }
+        }
+      )
+    );
+    
+    return { success: true };
+  }
+  
+  /**
+   * Unfollow an artist
+   * @param {string} artistId - Spotify artist ID
+   */
+  async unfollowArtist(artistId) {
+    const headers = await this.getAuthHeaders();
+    const axiosInstance = this.getAxiosInstance();
+    
+    await this.makeRequestWithRetry(() =>
+      axiosInstance.delete(`https://api.spotify.com/v1/me/following`, 
+        { 
+          headers,
+          params: { type: 'artist', ids: artistId }
+        }
+      )
+    );
+    
+    return { success: true };
+  }
+  
+  /**
+   * Check if current user follows an artist
+   * @param {string} artistIds - Array of Spotify artist IDs
+   */
+  async checkUserFollowingArtists(artistIds) {
+    const headers = await this.getAuthHeaders();
+    const axiosInstance = this.getAxiosInstance();
+    const response = await this.makeRequestWithRetry(() =>
+      axiosInstance.get(`https://api.spotify.com/v1/me/following/contains`, {
+        headers,
+        params: { 
+          type: 'artist',
+          ids: artistIds.join(',')
+        },
+      })
+    );
+    
+    return response.data; // Returns array of booleans in same order as input IDs
   }
 }
 
