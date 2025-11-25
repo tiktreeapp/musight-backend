@@ -97,135 +97,13 @@ async function authenticate(req, res, next) {
  * Get comprehensive dashboard data
  */
 router.get('/dashboard', authenticate, async (req, res) => {
-  // Set timeout for the entire request
-  req.setTimeout(45000, () => { // 45 seconds timeout
-    console.error('Request timeout for /api/stats/dashboard');
-  });
-
   try {
-    // Use cache fallback mechanism for dashboard data
-    const result = await withCacheFallback(
-      async (db) => {
-        // Use database if available
-        const analysisService = new AnalysisService(req.user);
-        return await analysisService.getDashboard();
-      },
-      async (cache) => {
-        // Fallback to cache or fetch from Spotify directly
-        console.log(`Using cache fallback for dashboard data for user ${req.user.id}`);
-        
-        // Try to load from cache first
-        let cachedData = await cache.load(req.user.id, 'dashboard');
-        if (cachedData) {
-          console.log('Returning cached dashboard data');
-          return cachedData;
-        }
-        
-        // If no cache, fetch fresh data from Spotify
-        console.log('No cached dashboard data, fetching fresh data from Spotify');
-        const spotifyService = new SpotifyService(req.user);
-        
-        // Fetch data with timeout protection
-        const [recentTracks, topArtists, listeningStats] = await Promise.all([
-          Promise.race([
-            spotifyService.getRecentlyPlayed(20),
-            new Promise((_, reject) => 
-              setTimeout(() => reject(new Error('Timeout fetching recent tracks')), 15000)
-            )
-          ]).catch(() => []),
-          Promise.race([
-            spotifyService.getTopArtists('medium_term', 10),
-            new Promise((_, reject) => 
-              setTimeout(() => reject(new Error('Timeout fetching top artists')), 15000)
-            )
-          ]).catch(() => []),
-          Promise.race([
-            (async () => {
-              // Simple stats based on recent tracks
-              const tracks = await spotifyService.getRecentlyPlayed(50);
-              return {
-                timeRange: '7d',
-                totalTracks: tracks.length,
-                uniqueTracks: new Set(tracks.map(t => t.trackId)).size,
-                uniqueArtists: new Set(tracks.map(t => t.artist)).size,
-                totalListeningTime: { hours: 0, minutes: 0, totalMs: 0 }, // Placeholder
-                topTracks: tracks.slice(0, 10),
-                topArtists: [], // Will be filled from topArtists above
-                hourlyActivity: new Array(24).fill(0),
-                firstTrack: tracks[tracks.length - 1] || null,
-                lastTrack: tracks[0] || null,
-              };
-            })(),
-            new Promise((_, reject) => 
-              setTimeout(() => reject(new Error('Timeout fetching listening stats')), 15000)
-            )
-          ]).catch(() => ({
-            timeRange: '7d',
-            totalTracks: 0,
-            uniqueTracks: 0,
-            uniqueArtists: 0,
-            totalListeningTime: { hours: 0, minutes: 0, totalMs: 0 },
-            topTracks: [],
-            topArtists: [],
-            hourlyActivity: new Array(24).fill(0),
-            firstTrack: null,
-            lastTrack: null,
-          }))
-        ]);
-
-        // Build dashboard response
-        const dashboardData = {
-          stats: listeningStats,
-          topArtists: topArtists.map(artist => ({
-            id: artist.artistId,
-            artistId: artist.artistId,
-            name: artist.name,
-            genres: artist.genres || [],
-            imageUrl: artist.imageUrl || null,
-            playCount: artist.playCount || 0,
-          })),
-          recentTracks: recentTracks,
-          spotifyTopTracks: await Promise.race([
-            spotifyService.getTopTracks('medium_term', 10),
-            new Promise((_, reject) => 
-              setTimeout(() => reject(new Error('Timeout fetching top tracks')), 15000)
-            )
-          ]).catch(() => [])
-        };
-
-        // Cache the result for future requests
-        try {
-          await cache.save(req.user.id, 'dashboard', dashboardData);
-        } catch (cacheError) {
-          console.error('Failed to cache dashboard data:', cacheError.message);
-        }
-
-        return dashboardData;
-      },
-      { userId: req.user.id, dataType: 'dashboard', fallbackToCache: true }
-    );
-
-    res.json(result);
+    const analysisService = new AnalysisService(req.user);
+    const dashboard = await analysisService.getDashboard();
+    res.json(dashboard);
   } catch (error) {
     console.error('Error fetching dashboard:', error);
-    // Return a minimal response instead of failing completely
-    res.json({
-      stats: {
-        timeRange: '7d',
-        totalTracks: 0,
-        uniqueTracks: 0,
-        uniqueArtists: 0,
-        totalListeningTime: { hours: 0, minutes: 0, totalMs: 0 },
-        topTracks: [],
-        topArtists: [],
-        hourlyActivity: new Array(24).fill(0),
-        firstTrack: null,
-        lastTrack: null,
-      },
-      topArtists: [],
-      recentTracks: [],
-      spotifyTopTracks: []
-    });
+    res.status(500).json({ error: 'Failed to fetch dashboard data' });
   }
 });
 
@@ -235,11 +113,6 @@ router.get('/dashboard', authenticate, async (req, res) => {
  * Query params: timeRange (24h, 7d, 30d, all)
  */
 router.get('/listening', authenticate, async (req, res) => {
-  // Set timeout for the entire request
-  req.setTimeout(30000, () => { // 30 seconds timeout
-    console.error('Request timeout for /api/stats/listening');
-  });
-
   try {
     const { timeRange = '7d' } = req.query;
     const analysisService = new AnalysisService(req.user);
@@ -258,22 +131,8 @@ router.get('/listening', authenticate, async (req, res) => {
  * Can optionally sync from Spotify first by adding ?sync=true
  */
 router.get('/top-tracks', authenticate, async (req, res) => {
-  // Set timeout for the entire request
-  req.setTimeout(45000, () => { // 45 seconds timeout
-    console.error('Request timeout for /api/stats/top-tracks');
-  });
-
   try {
     const { time_range = 'medium_term', limit = 20, sync = false } = req.query;
-    const validTimeRanges = ['short_term', 'medium_term', 'long_term'];
-    
-    if (!validTimeRanges.includes(time_range)) {
-      return res.status(400).json({ 
-        error: 'Invalid time_range', 
-        validOptions: validTimeRanges 
-      });
-    }
-
     const analysisService = new AnalysisService(req.user);
 
     // If sync is requested, sync from Spotify first
@@ -281,18 +140,42 @@ router.get('/top-tracks', authenticate, async (req, res) => {
       await analysisService.syncTopTracks(time_range, 50);
     }
 
-    // Get top tracks from Spotify API instead of local database
-    let tracks = await analysisService.getTopTracksFromSpotify(time_range, parseInt(limit));
+    // Get top tracks from database (aggregated by play count)
+    const tracks = await analysisService.getRecentTracks(100);
+    
+    // Group by track and count plays
+    const trackCounts = {};
+    tracks.forEach(track => {
+      const key = track.trackId;
+      if (!trackCounts[key]) {
+        trackCounts[key] = {
+          trackId: track.trackId,
+          name: track.name,
+          artist: track.artist,
+          imageUrl: track.imageUrl,
+          count: 0,
+          lastPlayed: track.playedAt,
+        };
+      }
+      trackCounts[key].count++;
+      if (track.playedAt > trackCounts[key].lastPlayed) {
+        trackCounts[key].lastPlayed = track.playedAt;
+      }
+    });
+
+    const topTracks = Object.values(trackCounts)
+      .sort((a, b) => b.count - a.count)
+      .slice(0, parseInt(limit));
 
     // Ensure all tracks have required fields including imageUrl
-    const formattedTracks = tracks.map(track => ({
+    const formattedTracks = topTracks.map(track => ({
       trackId: track.trackId,
       name: track.name,
       artist: track.artist,
-      artistIds: track.artistIds || [],
       imageUrl: track.imageUrl || null,
-      duration: track.duration || null,
-      popularity: track.popularity || null,
+      count: track.count || 0,
+      plays: track.count || 0, // Alias for count
+      lastPlayed: track.lastPlayed || null,
     }));
 
     res.json(formattedTracks);
@@ -303,28 +186,178 @@ router.get('/top-tracks', authenticate, async (req, res) => {
 });
 
 /**
+ * GET /api/stats/top-tracks-by-time
+ * Get top tracks by specific time range
+ * Query params: timeRange (24h, 7d, 30d, all), limit
+ */
+router.get('/top-tracks-by-time', authenticate, async (req, res) => {
+  try {
+    const { timeRange = 'all', limit = 20 } = req.query;
+    const analysisService = new AnalysisService(req.user);
+
+    // Get tracks based on time range from database
+    const now = new Date();
+    let startDate;
+
+    switch (timeRange) {
+      case '24h':
+        startDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+        break;
+      case '7d':
+        startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        break;
+      case '30d':
+        startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        break;
+      case 'all':
+        startDate = new Date(0); // All time
+        break;
+      default:
+        // Default to 'all' if invalid timeRange provided
+        startDate = new Date(0);
+    }
+
+    // Get tracks from database within the specified time range
+    const allTracks = await prisma.trackStat.findMany({
+      where: {
+        userId: req.user.id,
+        playedAt: { gte: startDate },
+      },
+    });
+
+    // Count plays per track
+    const trackCounts = {};
+    allTracks.forEach(track => {
+      const key = track.trackId;
+      if (!trackCounts[key]) {
+        trackCounts[key] = {
+          trackId: track.trackId,
+          name: track.name,
+          artist: track.artist,
+          imageUrl: track.imageUrl,
+          count: 0,
+          lastPlayed: track.playedAt,
+        };
+      }
+      trackCounts[key].count++;
+      if (track.playedAt > trackCounts[key].lastPlayed) {
+        trackCounts[key].lastPlayed = track.playedAt;
+      }
+    });
+
+    // Convert to array and sort by play count
+    const topTracks = Object.values(trackCounts)
+      .sort((a, b) => b.count - a.count)
+      .slice(0, parseInt(limit));
+
+    // Ensure all tracks have required fields including imageUrl
+    const formattedTracks = topTracks.map(track => ({
+      trackId: track.trackId,
+      name: track.name,
+      artist: track.artist,
+      imageUrl: track.imageUrl || null,
+      count: track.count || 0,
+      plays: track.count || 0, // Alias for count
+      lastPlayed: track.lastPlayed || null,
+    }));
+
+    res.json(formattedTracks);
+  } catch (error) {
+    console.error('Error fetching top tracks by time:', error);
+    res.status(500).json({ error: 'Failed to fetch top tracks by time range' });
+  }
+});
+
+/**
+ * GET /api/stats/top-artists-by-time
+ * Get top artists by specific time range
+ * Query params: timeRange (24h, 7d, 30d, all), limit
+ */
+router.get('/top-artists-by-time', authenticate, async (req, res) => {
+  try {
+    const { timeRange = 'all', limit = 20 } = req.query;
+    const analysisService = new AnalysisService(req.user);
+
+    // Get tracks based on time range from database
+    const now = new Date();
+    let startDate;
+
+    switch (timeRange) {
+      case '24h':
+        startDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+        break;
+      case '7d':
+        startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        break;
+      case '30d':
+        startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        break;
+      case 'all':
+        startDate = new Date(0); // All time
+        break;
+      default:
+        // Default to 'all' if invalid timeRange provided
+        startDate = new Date(0);
+    }
+
+    // Get tracks from database within the specified time range
+    const allTracks = await prisma.trackStat.findMany({
+      where: {
+        userId: req.user.id,
+        playedAt: { gte: startDate },
+      },
+    });
+
+    // Count plays per artist based on tracks
+    const artistCounts = {};
+    allTracks.forEach(track => {
+      // Use artist name as key since we don't have artist IDs in trackStat
+      const key = track.artist;
+      if (!artistCounts[key]) {
+        artistCounts[key] = {
+          name: track.artist,
+          count: 0,
+          lastPlayed: track.playedAt,
+          imageUrl: track.imageUrl || null, // Use the imageUrl from any track by this artist
+        };
+      }
+      artistCounts[key].count++;
+      if (track.playedAt > artistCounts[key].lastPlayed) {
+        artistCounts[key].lastPlayed = track.playedAt;
+      }
+    });
+
+    // Convert to array and sort by play count
+    const topArtists = Object.values(artistCounts)
+      .sort((a, b) => b.count - a.count)
+      .slice(0, parseInt(limit));
+
+    // Ensure all artists have required fields including imageUrl
+    const formattedArtists = topArtists.map(artist => ({
+      artistId: null, // We don't have artistId from trackStat, but keeping for consistency
+      name: artist.name,
+      imageUrl: artist.imageUrl || null,
+      count: artist.count || 0,
+      plays: artist.count || 0, // Alias for count
+      lastPlayed: artist.lastPlayed || null,
+    }));
+
+    res.json(formattedArtists);
+  } catch (error) {
+    console.error('Error fetching top artists by time:', error);
+    res.status(500).json({ error: 'Failed to fetch top artists by time range' });
+  }
+});
+
+/**
  * GET /api/stats/top-artists
  * Get top artists
  * Query params: time_range (short_term, medium_term, long_term), limit
  * Can optionally sync from Spotify first by adding ?sync=true
  */
 router.get('/top-artists', authenticate, async (req, res) => {
-  // Set timeout for the entire request
-  req.setTimeout(45000, () => { // 45 seconds timeout
-    console.error('Request timeout for /api/stats/top-artists');
-  });
-
   try {
     const { time_range = 'medium_term', limit = 20, sync = false } = req.query;
-    const validTimeRanges = ['short_term', 'medium_term', 'long_term'];
-    
-    if (!validTimeRanges.includes(time_range)) {
-      return res.status(400).json({ 
-        error: 'Invalid time_range', 
-        validOptions: validTimeRanges 
-      });
-    }
-
     const analysisService = new AnalysisService(req.user);
 
     // If sync is requested, sync from Spotify first
@@ -332,8 +365,21 @@ router.get('/top-artists', authenticate, async (req, res) => {
       await analysisService.syncTopArtists(time_range, 50);
     }
 
-    // Get top artists from database or Spotify - use the new method that fetches from Spotify API
-    let artists = await analysisService.getTopArtistsFromSpotify(time_range, parseInt(limit));
+    // Get top artists from database or Spotify
+    let artists = await analysisService.getTopArtists(parseInt(limit));
+    
+    // If no artists found in database and sync wasn't requested, try fetching from Spotify directly
+    if ((!artists || artists.length === 0) && sync !== 'true') {
+      try {
+        const spotifyService = new SpotifyService(req.user);
+        artists = await spotifyService.getTopArtists(time_range, parseInt(limit));
+        // Cache the results
+        const { localCache } = await import('../utils/dbFallback.js');
+        await localCache.save(req.user.id, 'topArtists', artists);
+      } catch (spotifyError) {
+        console.error('Error fetching top artists from Spotify:', spotifyError);
+      }
+    }
     
     // Ensure all artists have required fields
     const formattedArtists = artists.map(artist => ({
@@ -362,24 +408,13 @@ router.get('/top-artists', authenticate, async (req, res) => {
  * Falls back to cache if database unavailable
  */
 router.get('/recent', authenticate, async (req, res) => {
-  // Set timeout for the entire request
-  req.setTimeout(45000, () => { // 45 seconds timeout
-    console.error('Request timeout for /api/stats/recent');
-  });
-
   try {
     const limit = parseInt(req.query.limit) || 50;
     const analysisService = new AnalysisService(req.user);
     const userId = req.user.id;
     
     // Get directly from Spotify API (real-time data)
-    // Use a promise with timeout to ensure the call doesn't hang
-    const tracks = await Promise.race([
-      analysisService.spotifyService.getRecentlyPlayed(limit),
-      new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Timeout fetching recent tracks from Spotify')), 25000)
-      )
-    ]);
+    const tracks = await analysisService.spotifyService.getRecentlyPlayed(limit);
     
     // Cache the results if database available
     const isDbAvailable = await checkDatabase();
@@ -423,11 +458,6 @@ router.get('/recent', authenticate, async (req, res) => {
  * Get top playlists (alias for /api/spotify/top-playlists)
  */
 router.get('/top-playlists', authenticate, async (req, res) => {
-  // Set timeout for the entire request
-  req.setTimeout(30000, () => { // 30 seconds timeout
-    console.error('Request timeout for /api/stats/top-playlists');
-  });
-
   try {
     const limit = parseInt(req.query.limit) || 20;
     
@@ -447,11 +477,6 @@ router.get('/top-playlists', authenticate, async (req, res) => {
  * Falls back to local cache if database unavailable
  */
 router.get('/profile', authenticate, async (req, res) => {
-  // Set timeout for the entire request
-  req.setTimeout(60000, () => { // 60 seconds timeout
-    console.error('Request timeout for /api/stats/profile');
-  });
-
   try {
     const analysisService = new AnalysisService(req.user);
     const userId = req.user.id;
@@ -482,26 +507,12 @@ router.get('/profile', authenticate, async (req, res) => {
           // Try to build profile from cached data
           console.log(`Cache not found for user ${userId}, fetching from Spotify...`);
           
-          // Fetch data from Spotify with timeout protection
+          // Fetch data from Spotify
+          const spotifyService = new SpotifyService(req.user);
           const [topTracks, topArtists, recentTracks] = await Promise.all([
-            Promise.race([
-              analysisService.spotifyService.getTopTracks('medium_term', 20),
-              new Promise((_, reject) => 
-                setTimeout(() => reject(new Error('Timeout fetching top tracks from Spotify')), 25000)
-              )
-            ]).catch(() => []),
-            Promise.race([
-              analysisService.spotifyService.getTopArtists('medium_term', 20),
-              new Promise((_, reject) => 
-                setTimeout(() => reject(new Error('Timeout fetching top artists from Spotify')), 25000)
-              )
-            ]).catch(() => []),
-            Promise.race([
-              analysisService.spotifyService.getRecentlyPlayed(50),
-              new Promise((_, reject) => 
-                setTimeout(() => reject(new Error('Timeout fetching recently played from Spotify')), 25000)
-              )
-            ]).catch(() => []),
+            spotifyService.getTopTracks('medium_term', 20).catch(() => []),
+            spotifyService.getTopArtists('medium_term', 20).catch(() => []),
+            spotifyService.getRecentlyPlayed(50).catch(() => []),
           ]);
 
           // Cache individual data
@@ -556,80 +567,6 @@ router.get('/profile', authenticate, async (req, res) => {
   } catch (error) {
     console.error('Error fetching profile:', error);
     res.status(500).json({ error: 'Failed to fetch music profile', message: error.message });
-  }
-});
-
-/**
- * GET /api/stats/top-tracks-by-time
- * Get top tracks from Spotify for specific time range
- * Query params: time_range (short_term, medium_term, long_term), limit
- */
-router.get('/top-tracks-by-time', authenticate, async (req, res) => {
-  // Set timeout for the entire request
-  req.setTimeout(30000, () => { // 30 seconds timeout
-    console.error('Request timeout for /api/stats/top-tracks-by-time');
-  });
-
-  try {
-    const { time_range = 'medium_term', limit = 20 } = req.query;
-    const validTimeRanges = ['short_term', 'medium_term', 'long_term'];
-    
-    if (!validTimeRanges.includes(time_range)) {
-      return res.status(400).json({ 
-        error: 'Invalid time_range', 
-        validOptions: validTimeRanges 
-      });
-    }
-
-    const analysisService = new AnalysisService(req.user);
-    const tracks = await analysisService.getTopTracksFromSpotify(time_range, parseInt(limit));
-    
-    // Set cache control headers to help with client-side caching
-    const timestamp = new Date().toISOString();
-    res.set('X-Data-Timestamp', timestamp);
-    res.set('Cache-Control', 'no-cache'); // For now, to prevent any caching issues
-    
-    res.json(tracks);
-  } catch (error) {
-    console.error('Error fetching top tracks by time:', error);
-    res.status(500).json({ error: 'Failed to fetch top tracks by time range', message: error.message });
-  }
-});
-
-/**
- * GET /api/stats/top-artists-by-time
- * Get top artists from Spotify for specific time range
- * Query params: time_range (short_term, medium_term, long_term), limit
- */
-router.get('/top-artists-by-time', authenticate, async (req, res) => {
-  // Set timeout for the entire request
-  req.setTimeout(30000, () => { // 30 seconds timeout
-    console.error('Request timeout for /api/stats/top-artists-by-time');
-  });
-
-  try {
-    const { time_range = 'medium_term', limit = 20 } = req.query;
-    const validTimeRanges = ['short_term', 'medium_term', 'long_term'];
-    
-    if (!validTimeRanges.includes(time_range)) {
-      return res.status(400).json({ 
-        error: 'Invalid time_range', 
-        validOptions: validTimeRanges 
-      });
-    }
-
-    const analysisService = new AnalysisService(req.user);
-    const artists = await analysisService.getTopArtistsFromSpotify(time_range, parseInt(limit));
-    
-    // Set cache control headers to help with client-side caching
-    const timestamp = new Date().toISOString();
-    res.set('X-Data-Timestamp', timestamp);
-    res.set('Cache-Control', 'no-cache'); // For now, to prevent any caching issues
-    
-    res.json(artists);
-  } catch (error) {
-    console.error('Error fetching top artists by time:', error);
-    res.status(500).json({ error: 'Failed to fetch top artists by time range', message: error.message });
   }
 });
 

@@ -147,6 +147,12 @@ Authorization: Bearer <jwt_token>
 #### `GET /api/stats/top-tracks?limit=20`
 获取最常听的歌曲
 
+#### `GET /api/stats/top-tracks-by-time?timeRange=7d&limit=20`
+获取指定时间范围内的最常听歌曲（支持 24h, 7d, 30d, all）
+
+#### `GET /api/stats/top-artists-by-time?timeRange=7d&limit=20`
+获取指定时间范围内的最常听艺术家（支持 24h, 7d, 30d, all）
+
 #### `GET /api/stats/top-artists?limit=20`
 获取最常听的艺术家
 

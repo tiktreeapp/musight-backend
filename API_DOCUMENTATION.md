@@ -185,7 +185,7 @@ Authorization: Bearer <token>
 
 ---
 
-#### 3.3 获取 Top 歌曲
+#### 3.3 获取 Top 歌曲（按时间段）
 ```
 GET /api/stats/top-tracks?time_range=medium_term&limit=20&sync=true
 Authorization: Bearer <token>
@@ -208,6 +208,65 @@ Authorization: Bearer <token>
   }
 ]
 ```
+
+---
+
+#### 3.4 获取 Top 歌曲（按自定义时间范围）
+```
+GET /api/stats/top-tracks-by-time?timeRange=7d&limit=20
+Authorization: Bearer <token>
+```
+**参数：**
+- `timeRange`: `24h`, `7d`, `30d`, `all`（默认：`all`）
+- `limit`: 数量（默认：20）
+
+**响应：**
+```json
+[
+  {
+    "trackId": "xxx",
+    "name": "歌曲名",
+    "artist": "艺术家",
+    "imageUrl": "https://...",
+    "count": 15,
+    "plays": 15,
+    "lastPlayed": "2025-01-01T00:00:00Z"
+  }
+]
+```
+**说明：** 
+- 这个接口根据数据库中存储的播放记录，按指定时间范围统计 Top 歌曲
+- 支持 Last Week（`7d`）和 Last Month（`30d`）等时间段
+- 与 `/api/stats/top-tracks` 不同，此接口基于本地数据库记录而非 Spotify API 的时间范围
+
+---
+
+#### 3.5 获取 Top 艺术家（按自定义时间范围）
+```
+GET /api/stats/top-artists-by-time?timeRange=7d&limit=20
+Authorization: Bearer <token>
+```
+**参数：**
+- `timeRange`: `24h`, `7d`, `30d`, `all`（默认：`all`）
+- `limit`: 数量（默认：20）
+
+**响应：**
+```json
+[
+  {
+    "artistId": null,
+    "name": "艺术家名",
+    "imageUrl": "https://...",
+    "count": 15,
+    "plays": 15,
+    "lastPlayed": "2025-01-01T00:00:00Z"
+  }
+]
+```
+**说明：** 
+- 这个接口根据数据库中存储的播放记录，按指定时间范围统计 Top 艺术家
+- 支持 Last Week（`7d`）和 Last Month（`30d`）等时间段
+- 与 `/api/stats/top-artists` 不同，此接口基于本地数据库记录而非 Spotify API 的时间范围
 
 ---
 
