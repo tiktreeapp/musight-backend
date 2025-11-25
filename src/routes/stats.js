@@ -361,7 +361,7 @@ router.get('/top-artists-by-time', authenticate, async (req, res) => {
 
     // Ensure all artists have required fields including imageUrl
     const formattedArtists = topArtists.map(artist => ({
-      artistId: null, // We don't have artistId from trackStat, but keeping for consistency
+      artistId: artist.artistId || null,
       name: artist.name,
       imageUrl: artist.imageUrl || null,
       count: artist.count || 0,
