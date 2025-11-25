@@ -335,25 +335,31 @@ router.get('/top-artists-by-time', authenticate, async (req, res) => {
     });
     
     // Try to get artist IDs and images from ArtistStat table if available
-    for (const artistName in artistCounts) {
+    // Use findMany to get all matching artists at once for better performance
+    const artistNames = Object.keys(artistCounts);
+    if (artistNames.length > 0) {
       try {
-        const artistStat = await prisma.artistStat.findFirst({
+        const artistStats = await prisma.artistStat.findMany({
           where: {
             userId: req.user.id,
-            name: artistName,
+            name: { in: artistNames },
           },
           select: {
+            name: true,
             artistId: true,
             imageUrl: true,
           }
         });
         
-        if (artistStat) {
-          artistCounts[artistName].artistId = artistStat.artistId;
-          if (!artistCounts[artistName].imageUrl) {
-            artistCounts[artistName].imageUrl = artistStat.imageUrl;
+        // Map the results back to artistCounts
+        artistStats.forEach(artistStat => {
+          if (artistCounts[artistStat.name]) {
+            artistCounts[artistStat.name].artistId = artistStat.artistId;
+            if (!artistCounts[artistStat.name].imageUrl) {
+              artistCounts[artistStat.name].imageUrl = artistStat.imageUrl;
+            }
           }
-        }
+        });
       } catch (error) {
         // If ArtistStat query fails, continue with existing data
         console.warn('Could not fetch artist details from ArtistStat:', error.message);
