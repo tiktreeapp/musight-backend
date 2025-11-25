@@ -188,18 +188,18 @@ router.get('/top-tracks', authenticate, async (req, res) => {
 /**
  * GET /api/stats/top-tracks-by-time
  * Get top tracks by specific time range
- * Query params: timeRange (24h, 7d, 30d, all), limit
+ * Query params: time_range (24h, 7d, 30d, all), limit
  */
 router.get('/top-tracks-by-time', authenticate, async (req, res) => {
   try {
-    const { timeRange = 'all', limit = 20 } = req.query;
+    const { time_range = 'all', limit = 20 } = req.query;
     const analysisService = new AnalysisService(req.user);
 
     // Get tracks based on time range from database
     const now = new Date();
     let startDate;
 
-    switch (timeRange) {
+    switch (time_range) {
       case '24h':
         startDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
         break;
@@ -213,7 +213,7 @@ router.get('/top-tracks-by-time', authenticate, async (req, res) => {
         startDate = new Date(0); // All time
         break;
       default:
-        // Default to 'all' if invalid timeRange provided
+        // Default to 'all' if invalid time_range provided
         startDate = new Date(0);
     }
 
@@ -271,18 +271,18 @@ router.get('/top-tracks-by-time', authenticate, async (req, res) => {
 /**
  * GET /api/stats/top-artists-by-time
  * Get top artists by specific time range
- * Query params: timeRange (24h, 7d, 30d, all), limit
+ * Query params: time_range (24h, 7d, 30d, all), limit
  */
 router.get('/top-artists-by-time', authenticate, async (req, res) => {
   try {
-    const { timeRange = 'all', limit = 20 } = req.query;
+    const { time_range = 'all', limit = 20 } = req.query;
     const analysisService = new AnalysisService(req.user);
 
     // Get tracks based on time range from database
     const now = new Date();
     let startDate;
 
-    switch (timeRange) {
+    switch (time_range) {
       case '24h':
         startDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
         break;
@@ -296,7 +296,7 @@ router.get('/top-artists-by-time', authenticate, async (req, res) => {
         startDate = new Date(0); // All time
         break;
       default:
-        // Default to 'all' if invalid timeRange provided
+        // Default to 'all' if invalid time_range provided
         startDate = new Date(0);
     }
 

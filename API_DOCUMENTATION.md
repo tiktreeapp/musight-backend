@@ -213,11 +213,11 @@ Authorization: Bearer <token>
 
 #### 3.4 获取 Top 歌曲（按自定义时间范围）
 ```
-GET /api/stats/top-tracks-by-time?timeRange=7d&limit=20
+GET /api/stats/top-tracks-by-time?time_range=7d&limit=20
 Authorization: Bearer <token>
 ```
 **参数：**
-- `timeRange`: `24h`, `7d`, `30d`, `all`（默认：`all`）
+- `time_range`: `24h`, `7d`, `30d`, `all`（默认：`all`）
 - `limit`: 数量（默认：20）
 
 **响应：**
@@ -243,11 +243,11 @@ Authorization: Bearer <token>
 
 #### 3.5 获取 Top 艺术家（按自定义时间范围）
 ```
-GET /api/stats/top-artists-by-time?timeRange=7d&limit=20
+GET /api/stats/top-artists-by-time?time_range=7d&limit=20
 Authorization: Bearer <token>
 ```
 **参数：**
-- `timeRange`: `24h`, `7d`, `30d`, `all`（默认：`all`）
+- `time_range`: `24h`, `7d`, `30d`, `all`（默认：`all`）
 - `limit`: 数量（默认：20）
 
 **响应：**
