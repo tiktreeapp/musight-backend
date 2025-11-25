@@ -140,12 +140,17 @@ router.get('/top-tracks', authenticate, async (req, res) => {
       await analysisService.syncTopTracks(time_range, 50);
     }
 
-    // Get top tracks from database (aggregated by play count)
-    const tracks = await analysisService.getRecentTracks(100);
+    // Get ALL tracks from database (aggregated by play count across all time)
+    const allTracks = await prisma.trackStat.findMany({
+      where: { 
+        userId: req.user.id 
+      },
+      orderBy: { playedAt: 'desc' }
+    });
     
-    // Group by track and count plays
+    // Group by track and count plays across all history
     const trackCounts = {};
-    tracks.forEach(track => {
+    allTracks.forEach(track => {
       const key = track.trackId;
       if (!trackCounts[key]) {
         trackCounts[key] = {
@@ -163,6 +168,7 @@ router.get('/top-tracks', authenticate, async (req, res) => {
       }
     });
 
+    // Sort by play count (descending) and take top N
     const topTracks = Object.values(trackCounts)
       .sort((a, b) => b.count - a.count)
       .slice(0, parseInt(limit));
