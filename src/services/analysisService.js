@@ -412,7 +412,9 @@ export class AnalysisService {
       const artists = await prisma.artistStat.findMany({
         where: { userId: this.user.id },
         take: limit,
-        orderBy: { playCount: 'desc' }, // Order by playCount instead of createdAt
+        orderBy: { 
+          playCount: 'desc' 
+        }
       });
 
       // Ensure imageUrl is present in all artists
@@ -428,8 +430,35 @@ export class AnalysisService {
       }));
     } catch (error) {
       console.error('Error fetching top artists from database, falling back to Spotify:', error);
-      // Fallback to Spotify if database query fails
-      return await this.spotifyService.getTopArtists('medium_term', limit);
+      console.error('Prisma error details:', error.message);
+      
+      // If the specific field sort fails, try a different approach
+      try {
+        // Fetch all artist stats for the user and sort in JavaScript
+        const allArtists = await prisma.artistStat.findMany({
+          where: { userId: this.user.id }
+        });
+        
+        // Sort by playCount in descending order and take the limit
+        const sortedArtists = allArtists
+          .sort((a, b) => (b.playCount || 0) - (a.playCount || 0))
+          .slice(0, limit);
+          
+        return sortedArtists.map(artist => ({
+          id: artist.id,
+          artistId: artist.artistId,
+          name: artist.name,
+          genres: artist.genres || [],
+          imageUrl: artist.imageUrl || null,
+          playCount: artist.playCount || 0,
+          createdAt: artist.createdAt,
+          updatedAt: artist.updatedAt,
+        }));
+      } catch (secondaryError) {
+        console.error('Secondary error when fetching artists:', secondaryError);
+        // If database fails completely, fall back to Spotify
+        return await this.spotifyService.getTopArtists('medium_term', limit);
+      }
     }
   }
 
