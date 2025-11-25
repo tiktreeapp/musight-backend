@@ -316,6 +316,7 @@ router.get('/top-artists-by-time', authenticate, async (req, res) => {
       if (!artistCounts[key]) {
         artistCounts[key] = {
           name: track.artist,
+          artistId: null, // We don't have artistId in TrackStat, will try to get from ArtistStat if needed
           count: 0,
           lastPlayed: track.playedAt,
           imageUrl: track.imageUrl || null, // Use the imageUrl from any track by this artist
@@ -326,6 +327,32 @@ router.get('/top-artists-by-time', authenticate, async (req, res) => {
         artistCounts[key].lastPlayed = track.playedAt;
       }
     });
+    
+    // Try to get artist IDs and images from ArtistStat table if available
+    for (const artistName in artistCounts) {
+      try {
+        const artistStat = await prisma.artistStat.findFirst({
+          where: {
+            userId: req.user.id,
+            name: artistName,
+          },
+          select: {
+            artistId: true,
+            imageUrl: true,
+          }
+        });
+        
+        if (artistStat) {
+          artistCounts[artistName].artistId = artistStat.artistId;
+          if (!artistCounts[artistName].imageUrl) {
+            artistCounts[artistName].imageUrl = artistStat.imageUrl;
+          }
+        }
+      } catch (error) {
+        // If ArtistStat query fails, continue with existing data
+        console.warn('Could not fetch artist details from ArtistStat:', error.message);
+      }
+    }
 
     // Convert to array and sort by play count
     const topArtists = Object.values(artistCounts)
