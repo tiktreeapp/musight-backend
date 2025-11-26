@@ -689,7 +689,7 @@ router.get('/me/following', authenticate, async (req, res) => {
         limit: limit,
         offset: 0, // For compatibility, though Spotify uses 'after' for pagination
         // Include next cursor if there are more items
-        next: artists.length === limit ? `?limit=${limit}&after=${artists[artists.length - 1].artistId}` : null
+        next: artists.length === limit && artists.length > 0 ? `?limit=${limit}&after=${artists[artists.length - 1].artistId}` : null
       }
     });
   } catch (error) {
