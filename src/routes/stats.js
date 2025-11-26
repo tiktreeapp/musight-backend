@@ -532,6 +532,12 @@ router.get('/profile', authenticate, async (req, res) => {
     // Try to get profile from database or cache
     const profile = await withCacheFallback(
       async (prismaClient) => {
+        // Safety check: ensure prismaClient is available
+        if (!prismaClient) {
+          console.error('Prisma client not available in profile fetch');
+          return null; // Return null to trigger cache fallback
+        }
+        
         let profile = await prismaClient.musicProfile.findUnique({
           where: { userId },
         });
