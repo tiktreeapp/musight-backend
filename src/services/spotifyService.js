@@ -601,6 +601,9 @@ export class SpotifyService {
     }
     
     try {
+      console.log('[DEBUG] getUserFollowedArtists - Request params:', params);
+      console.log('[DEBUG] getUserFollowedArtists - About to make request to Spotify');
+      
       const response = await this.makeRequestWithRetry(() =>
         axiosInstance.get('https://api.spotify.com/v1/me/following', {
           headers,
@@ -615,8 +618,14 @@ export class SpotifyService {
         hasData: !!response.data,
         dataKeys: response.data ? Object.keys(response.data) : [],
         hasArtists: !!response.data?.artists,
-        artistsKeys: response.data?.artists ? Object.keys(response.data.artists) : []
+        artistsKeys: response.data?.artists ? Object.keys(response.data.artists) : [],
+        artistsItemsCount: response.data?.artists?.items ? response.data.artists.items.length : 0
       });
+
+      // Log the actual artists items if they exist
+      if (response.data?.artists?.items) {
+        console.log('[DEBUG] First few artists returned:', response.data.artists.items.slice(0, 3));
+      }
 
       // Check if response has the expected structure
       if (!response.data || !response.data.artists || !response.data.artists.items) {
@@ -629,7 +638,7 @@ export class SpotifyService {
       }
 
       // Format response to match our standard format
-      return response.data.artists.items.map(artist => ({
+      const artists = response.data.artists.items.map(artist => ({
         artistId: artist.id || 'unknown_id',
         name: artist.name || 'Unknown Artist',
         genres: artist.genres || [],
@@ -637,6 +646,10 @@ export class SpotifyService {
         followers: artist.followers?.total || 0,
         popularity: artist.popularity || 0,
       }));
+      
+      console.log(`[DEBUG] Formatted ${artists.length} artists from Spotify response`);
+      
+      return artists;
     } catch (error) {
       console.error('[ERROR] Failed to fetch followed artists from Spotify:', error.message);
       console.error('Error details:', {
