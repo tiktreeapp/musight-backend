@@ -337,6 +337,7 @@ router.get('/top-artists-by-time', authenticate, async (req, res) => {
     // Try to get artist IDs and images from ArtistStat table if available
     // Use findMany to get all matching artists at once for better performance
     const artistNames = Object.keys(artistCounts);
+    console.log(`[DEBUG] Looking for ${artistNames.length} artists in ArtistStat:`, artistNames.slice(0, 5)); // Log first 5 for debugging
     if (artistNames.length > 0) {
       try {
         const artistStats = await prisma.artistStat.findMany({
@@ -351,6 +352,8 @@ router.get('/top-artists-by-time', authenticate, async (req, res) => {
           }
         });
         
+        console.log(`[DEBUG] Found ${artistStats.length} matching artists in ArtistStat`); // Debug log
+        
         // Map the results back to artistCounts
         artistStats.forEach(artistStat => {
           if (artistCounts[artistStat.name]) {
@@ -360,6 +363,12 @@ router.get('/top-artists-by-time', authenticate, async (req, res) => {
             }
           }
         });
+        
+        // Log which artists didn't get IDs
+        const missingIds = Object.values(artistCounts).filter(artist => !artist.artistId);
+        if (missingIds.length > 0) {
+          console.log(`[DEBUG] ${missingIds.length} artists missing IDs:`, missingIds.slice(0, 5).map(a => a.name));
+        }
       } catch (error) {
         // If ArtistStat query fails, continue with existing data
         console.warn('Could not fetch artist details from ArtistStat:', error.message);
