@@ -607,6 +607,22 @@ export class SpotifyService {
       })
     );
 
+    // Debug log to see the actual response structure
+    console.log('[DEBUG] getUserFollowedArtists response:', {
+      status: response.status,
+      statusText: response.statusText,
+      hasData: !!response.data,
+      dataKeys: response.data ? Object.keys(response.data) : [],
+      hasArtists: !!response.data?.artists,
+      artistsKeys: response.data?.artists ? Object.keys(response.data.artists) : []
+    });
+
+    // Check if response has the expected structure
+    if (!response.data || !response.data.artists || !response.data.artists.items) {
+      console.error('[ERROR] Unexpected response structure from Spotify API:', response.data);
+      throw new Error('Spotify API returned unexpected response structure for followed artists');
+    }
+
     // Format response to match our standard format
     return response.data.artists.items.map(artist => ({
       artistId: artist.id || 'unknown_id',
