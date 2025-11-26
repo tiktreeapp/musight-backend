@@ -587,6 +587,38 @@ export class SpotifyService {
   }
   
   /**
+   * Get user's followed artists
+   * @param {number} limit - Number of artists to return (max 50)
+   * @param {number} after - The last artist ID retrieved in the previous request
+   */
+  async getUserFollowedArtists(limit = 50, after = null) {
+    const headers = await this.getAuthHeaders();
+    const axiosInstance = this.getAxiosInstance();
+    
+    const params = { type: 'artist', limit };
+    if (after) {
+      params.after = after;
+    }
+    
+    const response = await this.makeRequestWithRetry(() =>
+      axiosInstance.get('https://api.spotify.com/v1/me/following', {
+        headers,
+        params
+      })
+    );
+
+    // Format response to match our standard format
+    return response.data.artists.items.map(artist => ({
+      artistId: artist.id || 'unknown_id',
+      name: artist.name || 'Unknown Artist',
+      genres: artist.genres || [],
+      imageUrl: artist.images?.[0]?.url || null,
+      followers: artist.followers?.total || 0,
+      popularity: artist.popularity || 0,
+    }));
+  }
+  
+  /**
    * Check if current user follows an artist
    * @param {string} artistIds - Array of Spotify artist IDs
    */

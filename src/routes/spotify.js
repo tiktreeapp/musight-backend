@@ -665,6 +665,29 @@ router.get('/me/tracks/contains', authenticate, async (req, res) => {
 });
 
 /**
+ * GET /api/spotify/me/following
+ * Get user's followed artists
+ * Query params: limit (default: 50), after (cursor for pagination)
+ */
+router.get('/me/following', authenticate, async (req, res) => {
+  // Set timeout for the entire request
+  req.setTimeout(30000, () => { // 30 seconds timeout
+    console.error('Request timeout for /api/spotify/me/following');
+  });
+
+  try {
+    const limit = parseInt(req.query.limit) || 50;
+    const after = req.query.after || null;
+    const spotifyService = new SpotifyService(req.user);
+    const artists = await spotifyService.getUserFollowedArtists(limit, after);
+    res.json(artists);
+  } catch (error) {
+    console.error('Error fetching user followed artists:', error);
+    res.status(500).json({ error: 'Failed to fetch user followed artists' });
+  }
+});
+
+/**
  * PUT /api/spotify/me/tracks
  * Save tracks to user's library (like/favorite)
  * Body: { trackIds: [] }
