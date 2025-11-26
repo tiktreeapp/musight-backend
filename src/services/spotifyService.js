@@ -605,5 +605,101 @@ export class SpotifyService {
     
     return response.data; // Returns array of booleans in same order as input IDs
   }
+  
+  /**
+   * Get user's saved tracks (liked/favorited tracks)
+   * @param {number} limit - Number of tracks to return (max 50)
+   * @param {number} offset - The index of the first track to return
+   */
+  async getUserSavedTracks(limit = 50, offset = 0) {
+    const headers = await this.getAuthHeaders();
+    const axiosInstance = this.getAxiosInstance();
+    const response = await this.makeRequestWithRetry(() =>
+      axiosInstance.get('https://api.spotify.com/v1/me/tracks', {
+        headers,
+        params: { limit, offset }
+      })
+    );
+
+    // Format response to match our standard format
+    return response.data.items.map(item => {
+      const track = item.track || {};
+      const artistName = track.artists && Array.isArray(track.artists) 
+        ? track.artists.map(a => a.name || 'Unknown Artist').join(', ') 
+        : 'Unknown Artist';
+      const artistIds = track.artists && Array.isArray(track.artists)
+        ? track.artists.map(a => a.id || 'unknown_id')
+        : [];
+      
+      return {
+        trackId: track.id || 'unknown_id',
+        name: track.name || 'Unknown Track',
+        artist: artistName,
+        artistIds: artistIds,
+        imageUrl: track.album?.images?.[0]?.url || null,
+        previewUrl: track.preview_url || null,
+        addedAt: item.added_at ? new Date(item.added_at) : null,
+        duration: track.duration_ms || 0,
+        popularity: track.popularity || 0,
+      };
+    });
+  }
+  
+  /**
+   * Check if user has saved tracks (liked/favorited)
+   * @param {string[]} trackIds - Array of Spotify track IDs
+   */
+  async checkUserSavedTracks(trackIds) {
+    const headers = await this.getAuthHeaders();
+    const axiosInstance = this.getAxiosInstance();
+    const response = await this.makeRequestWithRetry(() =>
+      axiosInstance.get('https://api.spotify.com/v1/me/tracks/contains', {
+        headers,
+        params: { 
+          ids: trackIds.join(',')
+        },
+      })
+    );
+    
+    return response.data; // Returns array of booleans in same order as input IDs
+  }
+  
+  /**
+   * Save tracks to user's library (like/favorite tracks)
+   * @param {string[]} trackIds - Array of Spotify track IDs to save
+   */
+  async saveTracks(trackIds) {
+    const headers = await this.getAuthHeaders();
+    const axiosInstance = this.getAxiosInstance();
+    
+    await this.makeRequestWithRetry(() =>
+      axiosInstance.put('https://api.spotify.com/v1/me/tracks', 
+        { ids: trackIds },
+        { headers }
+      )
+    );
+    
+    return { success: true };
+  }
+  
+  /**
+   * Remove tracks from user's library (unlike/unfavorite tracks)
+   * @param {string[]} trackIds - Array of Spotify track IDs to remove
+   */
+  async removeTracks(trackIds) {
+    const headers = await this.getAuthHeaders();
+    const axiosInstance = this.getAxiosInstance();
+    
+    await this.makeRequestWithRetry(() =>
+      axiosInstance.delete('https://api.spotify.com/v1/me/tracks', 
+        { 
+          headers,
+          data: { ids: trackIds }
+        }
+      )
+    );
+    
+    return { success: true };
+  }
 }
 

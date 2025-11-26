@@ -615,5 +615,104 @@ router.get('/top-playlists', authenticate, async (req, res) => {
   }
 });
 
+/**
+ * GET /api/spotify/me/tracks
+ * Get user's saved/liked tracks
+ * Query params: limit (default: 50), offset (default: 0)
+ */
+router.get('/me/tracks', authenticate, async (req, res) => {
+  // Set timeout for the entire request
+  req.setTimeout(30000, () => { // 30 seconds timeout
+    console.error('Request timeout for /api/spotify/me/tracks');
+  });
+
+  try {
+    const limit = parseInt(req.query.limit) || 50;
+    const offset = parseInt(req.query.offset) || 0;
+    const spotifyService = new SpotifyService(req.user);
+    const tracks = await spotifyService.getUserSavedTracks(limit, offset);
+    res.json(tracks);
+  } catch (error) {
+    console.error('Error fetching user saved tracks:', error);
+    res.status(500).json({ error: 'Failed to fetch user saved tracks' });
+  }
+});
+
+/**
+ * GET /api/spotify/me/tracks/contains
+ * Check if user has saved/liked specific tracks
+ * Query params: ids (comma-separated track IDs)
+ */
+router.get('/me/tracks/contains', authenticate, async (req, res) => {
+  // Set timeout for the entire request
+  req.setTimeout(30000, () => { // 30 seconds timeout
+    console.error('Request timeout for /api/spotify/me/tracks/contains');
+  });
+
+  try {
+    const ids = req.query.ids;
+    if (!ids) {
+      return res.status(400).json({ error: 'Missing ids parameter' });
+    }
+    const trackIds = Array.isArray(ids) ? ids : ids.split(',');
+    const spotifyService = new SpotifyService(req.user);
+    const result = await spotifyService.checkUserSavedTracks(trackIds);
+    res.json(result);
+  } catch (error) {
+    console.error('Error checking user saved tracks:', error);
+    res.status(500).json({ error: 'Failed to check user saved tracks' });
+  }
+});
+
+/**
+ * PUT /api/spotify/me/tracks
+ * Save tracks to user's library (like/favorite)
+ * Body: { trackIds: [] }
+ */
+router.put('/me/tracks', authenticate, async (req, res) => {
+  // Set timeout for the entire request
+  req.setTimeout(30000, () => { // 30 seconds timeout
+    console.error('Request timeout for /api/spotify/me/tracks');
+  });
+
+  try {
+    const { trackIds } = req.body;
+    if (!trackIds || !Array.isArray(trackIds)) {
+      return res.status(400).json({ error: 'trackIds array is required' });
+    }
+    const spotifyService = new SpotifyService(req.user);
+    await spotifyService.saveTracks(trackIds);
+    res.json({ success: true, message: 'Tracks saved successfully' });
+  } catch (error) {
+    console.error('Error saving tracks:', error);
+    res.status(500).json({ error: 'Failed to save tracks' });
+  }
+});
+
+/**
+ * DELETE /api/spotify/me/tracks
+ * Remove tracks from user's library (unlike/unfavorite)
+ * Body: { trackIds: [] }
+ */
+router.delete('/me/tracks', authenticate, async (req, res) => {
+  // Set timeout for the entire request
+  req.setTimeout(30000, () => { // 30 seconds timeout
+    console.error('Request timeout for /api/spotify/me/tracks');
+  });
+
+  try {
+    const { trackIds } = req.body;
+    if (!trackIds || !Array.isArray(trackIds)) {
+      return res.status(400).json({ error: 'trackIds array is required' });
+    }
+    const spotifyService = new SpotifyService(req.user);
+    await spotifyService.removeTracks(trackIds);
+    res.json({ success: true, message: 'Tracks removed successfully' });
+  } catch (error) {
+    console.error('Error removing tracks:', error);
+    res.status(500).json({ error: 'Failed to remove tracks' });
+  }
+});
+
 export default router;
 
