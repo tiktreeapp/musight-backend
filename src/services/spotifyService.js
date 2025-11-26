@@ -600,42 +600,55 @@ export class SpotifyService {
       params.after = after;
     }
     
-    const response = await this.makeRequestWithRetry(() =>
-      axiosInstance.get('https://api.spotify.com/v1/me/following', {
-        headers,
-        params
-      })
-    );
+    try {
+      const response = await this.makeRequestWithRetry(() =>
+        axiosInstance.get('https://api.spotify.com/v1/me/following', {
+          headers,
+          params
+        })
+      );
 
-    // Debug log to see the actual response structure
-    console.log('[DEBUG] getUserFollowedArtists response:', {
-      status: response.status,
-      statusText: response.statusText,
-      hasData: !!response.data,
-      dataKeys: response.data ? Object.keys(response.data) : [],
-      hasArtists: !!response.data?.artists,
-      artistsKeys: response.data?.artists ? Object.keys(response.data.artists) : []
-    });
+      // Debug log to see the actual response structure
+      console.log('[DEBUG] getUserFollowedArtists response:', {
+        status: response.status,
+        statusText: response.statusText,
+        hasData: !!response.data,
+        dataKeys: response.data ? Object.keys(response.data) : [],
+        hasArtists: !!response.data?.artists,
+        artistsKeys: response.data?.artists ? Object.keys(response.data.artists) : []
+      });
 
-    // Check if response has the expected structure
-    if (!response.data || !response.data.artists || !response.data.artists.items) {
-      console.error('[ERROR] Unexpected response structure from Spotify API:', response.data);
-      // If response contains error information, return empty array
-      if (response.data && response.data.error) {
-        console.error('[ERROR] Spotify API error:', response.data.error);
+      // Check if response has the expected structure
+      if (!response.data || !response.data.artists || !response.data.artists.items) {
+        console.error('[ERROR] Unexpected response structure from Spotify API:', response.data);
+        // If response contains error information, return empty array
+        if (response.data && response.data.error) {
+          console.error('[ERROR] Spotify API error:', response.data.error);
+        }
+        return []; // Return empty array instead of throwing error
       }
-      return []; // Return empty array instead of throwing error
-    }
 
-    // Format response to match our standard format
-    return response.data.artists.items.map(artist => ({
-      artistId: artist.id || 'unknown_id',
-      name: artist.name || 'Unknown Artist',
-      genres: artist.genres || [],
-      imageUrl: artist.images?.[0]?.url || null,
-      followers: artist.followers?.total || 0,
-      popularity: artist.popularity || 0,
-    }));
+      // Format response to match our standard format
+      return response.data.artists.items.map(artist => ({
+        artistId: artist.id || 'unknown_id',
+        name: artist.name || 'Unknown Artist',
+        genres: artist.genres || [],
+        imageUrl: artist.images?.[0]?.url || null,
+        followers: artist.followers?.total || 0,
+        popularity: artist.popularity || 0,
+      }));
+    } catch (error) {
+      console.error('[ERROR] Failed to fetch followed artists from Spotify:', error.message);
+      console.error('Error details:', {
+        name: error.name,
+        message: error.message,
+        code: error.code,
+        status: error.response?.status,
+        data: error.response?.data
+      });
+      // Return empty array instead of throwing error to prevent 500
+      return [];
+    }
   }
   
   /**
