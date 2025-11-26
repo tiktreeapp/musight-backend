@@ -266,10 +266,30 @@ export class SpotifyService {
   async getAudioAnalysis(trackId) {
     const headers = await this.getAuthHeaders();
     const axiosInstance = this.getAxiosInstance();
-    const response = await this.makeRequestWithRetry(() =>
-      axiosInstance.get(`https://api.spotify.com/v1/audio-analysis/${trackId}`, { headers })
-    );
-    return response.data;
+    
+    try {
+      console.log(`[DEBUG] Attempting to fetch audio analysis for ${trackId}`);
+      const response = await this.makeRequestWithRetry(() =>
+        axiosInstance.get(`https://api.spotify.com/v1/audio-analysis/${trackId}`, { headers })
+      );
+      
+      console.log(`[DEBUG] Raw audio analysis response for ${trackId}:`, {
+        status: response.status,
+        statusText: response.statusText,
+        hasData: !!response.data,
+        dataKeys: response.data ? Object.keys(response.data) : []
+      });
+      
+      return response.data;
+    } catch (error) {
+      console.error(`[ERROR] Error fetching audio analysis for track ${trackId}:`, error.message);
+      console.error(`[ERROR] Error details:`, {
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data
+      });
+      throw error;
+    }
   }
 
   /**
