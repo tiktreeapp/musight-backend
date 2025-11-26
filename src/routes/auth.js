@@ -28,6 +28,7 @@ router.get('/login', (req, res) => {
     'user-top-read',
     'user-read-email',
     'user-read-private',
+    'user-follow-read',
   ].join(' ');
 
   const authUrl = new URL('https://accounts.spotify.com/authorize');
