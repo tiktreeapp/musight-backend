@@ -531,8 +531,8 @@ router.get('/profile', authenticate, async (req, res) => {
 
     // Try to get profile from database or cache
     const profile = await withCacheFallback(
-      async (prisma) => {
-        let profile = await prisma.musicProfile.findUnique({
+      async (prismaClient) => {
+        let profile = await prismaClient.musicProfile.findUnique({
           where: { userId },
         });
 
@@ -540,7 +540,7 @@ router.get('/profile', authenticate, async (req, res) => {
         if (!profile) {
           console.log(`Profile not found for user ${userId}, triggering sync...`);
           await analysisService.syncUserPlayback('medium_term');
-          profile = await prisma.musicProfile.findUnique({
+          profile = await prismaClient.musicProfile.findUnique({
             where: { userId },
           });
         }

@@ -409,16 +409,17 @@ export class AnalysisService {
     }
 
     try {
-      const artists = await prisma.artistStat.findMany({
-        where: { userId: this.user.id },
-        take: limit,
-        orderBy: { 
-          playCount: 'desc' 
-        }
+      // First try to fetch with orderBy - if it fails, we'll sort in JS
+      const allArtists = await prisma.artistStat.findMany({
+        where: { userId: this.user.id }
       });
 
-      // Ensure imageUrl is present in all artists
-      return artists.map(artist => ({
+      // Sort by playCount in descending order and take the limit
+      const sortedArtists = allArtists
+        .sort((a, b) => (b.playCount || 0) - (a.playCount || 0))
+        .slice(0, limit);
+        
+      return sortedArtists.map(artist => ({
         id: artist.id,
         artistId: artist.artistId,
         name: artist.name,
@@ -432,33 +433,8 @@ export class AnalysisService {
       console.error('Error fetching top artists from database, falling back to Spotify:', error);
       console.error('Prisma error details:', error.message);
       
-      // If the specific field sort fails, try a different approach
-      try {
-        // Fetch all artist stats for the user and sort in JavaScript
-        const allArtists = await prisma.artistStat.findMany({
-          where: { userId: this.user.id }
-        });
-        
-        // Sort by playCount in descending order and take the limit
-        const sortedArtists = allArtists
-          .sort((a, b) => (b.playCount || 0) - (a.playCount || 0))
-          .slice(0, limit);
-          
-        return sortedArtists.map(artist => ({
-          id: artist.id,
-          artistId: artist.artistId,
-          name: artist.name,
-          genres: artist.genres || [],
-          imageUrl: artist.imageUrl || null,
-          playCount: artist.playCount || 0,
-          createdAt: artist.createdAt,
-          updatedAt: artist.updatedAt,
-        }));
-      } catch (secondaryError) {
-        console.error('Secondary error when fetching artists:', secondaryError);
-        // If database fails completely, fall back to Spotify
-        return await this.spotifyService.getTopArtists('medium_term', limit);
-      }
+      // If database fails completely, fall back to Spotify
+      return await this.spotifyService.getTopArtists('medium_term', limit);
     }
   }
 
