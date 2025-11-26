@@ -433,6 +433,44 @@ export class AnalysisService {
       console.error('Error fetching top artists from database, falling back to Spotify:', error);
       console.error('Prisma error details:', error.message);
       
+      // Check if this is a schema-related error and handle accordingly
+      if (error.message.includes('genre') || error.message.includes('playCount')) {
+        // If there are field-related errors, try a simplified query
+        try {
+          const allArtists = await prisma.artistStat.findMany({
+            where: { userId: this.user.id },
+            select: {
+              id: true,
+              artistId: true,
+              name: true,
+              genres: true,
+              imageUrl: true,
+              playCount: true,
+              createdAt: true,
+              updatedAt: true
+            }
+          });
+
+          // Sort by playCount in descending order and take the limit
+          const sortedArtists = allArtists
+            .sort((a, b) => (b.playCount || 0) - (a.playCount || 0))
+            .slice(0, limit);
+            
+          return sortedArtists.map(artist => ({
+            id: artist.id,
+            artistId: artist.artistId,
+            name: artist.name,
+            genres: artist.genres || [],
+            imageUrl: artist.imageUrl || null,
+            playCount: artist.playCount || 0,
+            createdAt: artist.createdAt,
+            updatedAt: artist.updatedAt,
+          }));
+        } catch (simplifiedError) {
+          console.error('Simplified query also failed:', simplifiedError);
+        }
+      }
+      
       // If database fails completely, fall back to Spotify
       return await this.spotifyService.getTopArtists('medium_term', limit);
     }
