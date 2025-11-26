@@ -620,7 +620,11 @@ export class SpotifyService {
     // Check if response has the expected structure
     if (!response.data || !response.data.artists || !response.data.artists.items) {
       console.error('[ERROR] Unexpected response structure from Spotify API:', response.data);
-      throw new Error('Spotify API returned unexpected response structure for followed artists');
+      // If response contains error information, return empty array
+      if (response.data && response.data.error) {
+        console.error('[ERROR] Spotify API error:', response.data.error);
+      }
+      return []; // Return empty array instead of throwing error
     }
 
     // Format response to match our standard format
