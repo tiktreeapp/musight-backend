@@ -680,7 +680,18 @@ router.get('/me/following', authenticate, async (req, res) => {
     const after = req.query.after || null;
     const spotifyService = new SpotifyService(req.user);
     const artists = await spotifyService.getUserFollowedArtists(limit, after);
-    res.json(artists);
+    
+    // Return data in the format expected by the frontend
+    res.json({
+      artists: {
+        items: artists,
+        total: artists.length,
+        limit: limit,
+        offset: 0, // For compatibility, though Spotify uses 'after' for pagination
+        // Include next cursor if there are more items
+        next: artists.length === limit ? `?limit=${limit}&after=${artists[artists.length - 1].artistId}` : null
+      }
+    });
   } catch (error) {
     console.error('Error fetching user followed artists:', error);
     res.status(500).json({ error: 'Failed to fetch user followed artists' });
